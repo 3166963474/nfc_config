@@ -24,8 +24,8 @@
 #define DEFAULT_SLAVE_ID                  0x00
 
 #define DEFAULT_MASTER_VEHICLE_ID         0x12
-#define DEFAULT_MASTER_POLL_START_SLAVE   0
-#define DEFAULT_MASTER_POLL_END_SLAVE     1
+#define DEFAULT_MASTER_POLL_START_SLAVE   1
+#define DEFAULT_MASTER_POLL_END_SLAVE     2
 
 /* ================= Frame constants ================= */
 
@@ -63,6 +63,8 @@
 #define bit6 6
 #define bit7 7
 
+#define ENABLE 1
+#define DISABLE 0
 
 typedef struct
 {
@@ -294,6 +296,26 @@ uint8_t set_bits_range(uint8_t val, uint8_t start_bit, uint8_t end_bit, uint8_t 
     return val;
 }
 
+const uint32_t uart_baudrate_list[] = {
+    300,
+    600,
+    1200,
+    2400,
+    4800,
+    9600,
+    14400,
+    19200,
+    28800,
+    38400,
+    57600,
+    115200,
+    230400,
+    460800,
+    921600
+};
+
+#define UART_BAUDRATE_COUNT (sizeof(uart_baudrate_list) / sizeof(uart_baudrate_list[0]))
+
 int main(void)
 {
     uint32_t now = current_unix_time_u32();
@@ -333,15 +355,26 @@ int main(void)
         },
         .reserved = {0},
         .vehicle_id = DEFAULT_SLAVE_VEHICLE_ID,
-        .slave_id = DEFAULT_SLAVE_ID
+        .slave_id = DEFAULT_SLAVE_ID  //闲置，占位符
     };
 
     uint8_t reserved_temp[RESERVED_LEN]={0};
-    reserved_temp[0] = set_bit(reserved_temp[0],bit0,1);//置位设定reserved段是否有效。如果设定为0，则会从片内flash加载先前保存的上一次有效reserved段配置。如果先前从来没有配置过有效的reserved段配置，则不工作。
-    reserved_temp[0] = set_bit(reserved_temp[0],bit1,0);//是否485接口日志输出，0为不输出
+    reserved_temp[0] = set_bit(reserved_temp[0],bit0,ENABLE);//置位设定reserved段是否有效。如果设定为0，则会从片内flash加载先前保存的上一次有效reserved段配置。如果先前从来没有配置过有效的reserved段配置，则不工作。
+    reserved_temp[0] = set_bit(reserved_temp[0],bit1,DISABLE);//是否485_1接口日志输出，0为不输出
+    reserved_temp[0] = set_bit(reserved_temp[0],bit2,DISABLE);//485_1接口是否输出josn信息
+    reserved_temp[0] = set_bit(reserved_temp[0],bit3,DISABLE);//485_1接口是否将收到的信息通过485_2转发
+    reserved_temp[0] = set_bit(reserved_temp[0],bit4,DISABLE);//485_2接口是否输出josn信息
+    reserved_temp[0] = set_bit(reserved_temp[0],bit5,DISABLE);//485_2接口是否将收到的信息通过485_1转发
     reserved_temp[1] = 20;//设定蜂鸣器连续响的秒数。设定0秒不响，最大设定254秒，设定0xff则一直响。
-    reserved_temp[2] = 1;//设定没系安全带多长时间就开始响，最大设定255秒.
-    
+    reserved_temp[2] = 1;//设定处于异常状态多长时间就开始响，最大设定255秒.
+    reserved_temp[3] = 0;//order_state的1-8异常状态标记
+    reserved_temp[4] = 0;//[3:0]order_state的9-12异常状态标记，[8:4]状态转移滤波时间，秒
+    reserved_temp[5] = 0;//设定对应的order_state是否开启滤波
+    reserved_temp[6] = 0;//[3:0]设定order_state的9-12是否开启滤波,[8:4]保留
+    reserved_temp[7] = 0;//bit7配置座椅A(左)是否使能，[6:0]bit配置坐位号，范围1-127
+    reserved_temp[8] = 0;//bit7配置座椅B(右)是否使能，[6:0]bit配置坐位号，范围1-127
+    reserved_temp[9] = 0;//[3:0]485_1波特率索引，[7:4]485_2波特率索引。具体波特率定义参考uart_baudrate_list
+
     memcpy(master.reserved,reserved_temp,RESERVED_LEN);
     memcpy(slave.reserved,reserved_temp,RESERVED_LEN);
 

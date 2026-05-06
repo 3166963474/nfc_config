@@ -75,6 +75,8 @@ void Error_Handler(void);
 #define Senser_4_GPIO_Port GPIOB
 #define DE_485_Pin GPIO_PIN_8
 #define DE_485_GPIO_Port GPIOA
+#define DE_485_2_Pin GPIO_PIN_15
+#define DE_485_2_GPIO_Port GPIOA
 #define Senser_1_Pin GPIO_PIN_5
 #define Senser_1_GPIO_Port GPIOB
 #define Senser_2_Pin GPIO_PIN_6

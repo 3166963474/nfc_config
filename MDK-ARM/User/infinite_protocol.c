@@ -1,8 +1,7 @@
 #include "infinite_protocol.h"
+#include "rs485bsp.h"
 
 #include <stddef.h>
-
-void UART_DBG_Printf_DMA(const char *fmt, ...);
 
 uint8_t InfiniteProtocol_CalcChecksum(const uint8_t *buf, uint16_t len_without_checksum)
 {

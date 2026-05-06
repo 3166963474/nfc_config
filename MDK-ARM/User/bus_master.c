@@ -580,6 +580,7 @@ void bus_master_task(bus_master_t *master, uint32_t now_ms)
 				{
 					print_sensor_status(master);
 					Send_state=0;
+					UART_DBG_Printf_DMA("Report status\r\n");
 				}
         if ((int32_t)(now_ms - master->round_sleep_until_tick) >= 0)
         {
