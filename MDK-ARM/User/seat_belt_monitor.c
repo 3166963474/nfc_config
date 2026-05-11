@@ -1,278 +1,531 @@
 #include "seat_belt_monitor.h"
 
-#include <stdint.h>
 #include <string.h>
-
 #include "main.h"
 #include "buzzer_led_drv.h"
-#include "bus_slave.h"
-#include "app_st25dv.h"
+
 /*
- * 说明：
- * 1. 本模块仅在从机模式下工作：BUS_MASTER_DEF == 0
- * 2. 每个从机有两个座位：
- *      seat0_belt = sensor[2]
- *      seat0_seat = sensor[3]
- *      seat1_belt = sensor[1]
- *      seat1_seat = sensor[0]
- * 3. reserved[1]：蜂鸣器响铃时长（秒）
- *      0x00 : 不响
- *      0x01~0xFE : 响对应秒数
- *      0xFF : 一直响
- * 4. reserved[2]：延时多久开始响（秒）
- * 5. 第一次响完后，如果人还在座位上，则不再重新计时；
- *    必须等人离座后再次坐下，才重新开始计时。
+ * GPIO mapping specified for the current hardware:
+ *   seat0_belt = PB14
+ *   seat0_seat = PB15
+ *   seat1_belt = PB6
+ *   seat1_seat = PB5
  */
+#ifndef SEAT0_BELT_GPIO_PORT
+#define SEAT0_BELT_GPIO_PORT GPIOB
+#endif
+#ifndef SEAT0_BELT_GPIO_PIN
+#define SEAT0_BELT_GPIO_PIN  GPIO_PIN_14
+#endif
 
-/* ===== 配置 ===== */
-#define SEAT_BELT_MONITOR_TICK_HZ      10u
-#define SEAT_BELT_MONITOR_SEAT_NUM     2u
-#define SEAT_BELT_MONITOR_FOREVER_TICK 0xFFFFFFFFu
+#ifndef SEAT0_SEAT_GPIO_PORT
+#define SEAT0_SEAT_GPIO_PORT GPIOB
+#endif
+#ifndef SEAT0_SEAT_GPIO_PIN
+#define SEAT0_SEAT_GPIO_PIN  GPIO_PIN_15
+#endif
 
-typedef struct
+#ifndef SEAT1_BELT_GPIO_PORT
+#define SEAT1_BELT_GPIO_PORT GPIOB
+#endif
+#ifndef SEAT1_BELT_GPIO_PIN
+#define SEAT1_BELT_GPIO_PIN  GPIO_PIN_6
+#endif
+
+#ifndef SEAT1_SEAT_GPIO_PORT
+#define SEAT1_SEAT_GPIO_PORT GPIOB
+#endif
+#ifndef SEAT1_SEAT_GPIO_PIN
+#define SEAT1_SEAT_GPIO_PIN  GPIO_PIN_5
+#endif
+
+/*
+ * Default assumption:
+ *   GPIO_PIN_SET means belt closed / seat occupied.
+ * If the real hardware is active-low, override these macros in project settings
+ * or before including this file.
+ */
+//#ifndef SEAT_BELT_MONITOR_BELT_CLOSED_LEVEL
+//#define SEAT_BELT_MONITOR_BELT_CLOSED_LEVEL GPIO_PIN_RESET
+//#endif
+
+//#ifndef SEAT_BELT_MONITOR_SEAT_OCCUPIED_LEVEL
+//#define SEAT_BELT_MONITOR_SEAT_OCCUPIED_LEVEL GPIO_PIN_RESET
+//#endif
+static GPIO_PinState SEAT_BELT_MONITOR_BELT_CLOSED_LEVEL = GPIO_PIN_SET;
+static GPIO_PinState SEAT_BELT_MONITOR_SEAT_OCCUPIED_LEVEL = GPIO_PIN_RESET;
+
+/* Set to 1 if you also want the red LED to follow the alarm state. */
+#ifndef SEAT_BELT_MONITOR_USE_RED_LED
+#define SEAT_BELT_MONITOR_USE_RED_LED 0U
+#endif
+
+#define ORDER_STATE_MIN             1U
+#define ORDER_STATE_MAX             12U
+#define ORDER_STATE_TO_MASK(order)  ((uint16_t)(1UL << ((uint8_t)(order) - 1U)))
+#define UINT8_INVALID               0xFFU
+
+seat_belt_monitor_seat_t s_seat[SEAT_PORT_COUNT];
+
+/* Latest-only report mailbox. New reports overwrite old unsent reports. */
+seat_belt_report_event_t s_report_mailbox;
+static uint8_t s_report_pending = 0U;
+static uint16_t s_event_seq = 0U;
+static uint16_t s_event_drop_count = 0U;
+
+static uint8_t s_alarm_output_active = 0U;
+
+/* transition_map[old_state][new_state] -> order_state. 0 means no transition. */
+static const uint8_t s_transition_map[4][4] =
 {
-    uint32_t unbelt_ticks;
-    uint32_t buzzer_ticks_left;
-    uint8_t alarm_active;
-    uint8_t alarm_done_for_this_occupancy;
-} seat_belt_alarm_state_t;
+    /* from 00 */ {0U,  1U,  8U, 11U},
+    /* from 01 */ {2U,  0U, 10U,  3U},
+    /* from 10 */ {7U,  9U,  0U,  6U},
+    /* from 11 */ {12U, 4U,  5U,  0U}
+};
 
-typedef struct
+static uint16_t seconds_to_ticks(uint8_t seconds)
 {
-    seat_belt_alarm_state_t seat[SEAT_BELT_MONITOR_SEAT_NUM];
-} seat_belt_monitor_ctx_t;
+    return (uint16_t)((uint16_t)seconds * (uint16_t)SEAT_BELT_MONITOR_TICK_HZ);
+}
 
-static seat_belt_monitor_ctx_t g_seat_belt_monitor_ctx;
-
-/* ===== 内部函数 ===== */
-
-static uint8_t SeatBeltMonitor_GetSeatOccupied(const uint8_t sensor[4], uint8_t seat_index)
+static uint8_t is_valid_seat_index(uint8_t seat_index)
 {
-    if (seat_index == 0u)
+    return (seat_index < SEAT_PORT_COUNT) ? 1U : 0U;
+}
+
+static uint8_t is_order_state_valid(uint8_t order_state)
+{
+    return ((order_state >= ORDER_STATE_MIN) && (order_state <= ORDER_STATE_MAX)) ? 1U : 0U;
+}
+
+static uint8_t order_mask_is_set(uint16_t mask, uint8_t order_state)
+{
+    if (is_order_state_valid(order_state) == 0U)
     {
-        return (sensor[3] != 0u) ? 1u : 0u;
+        return 0U;
+    }
+
+    return ((mask & ORDER_STATE_TO_MASK(order_state)) != 0U) ? 1U : 0U;
+}
+
+static uint8_t read_gpio_as_1_if_match(GPIO_TypeDef *port, uint16_t pin, GPIO_PinState active_level)
+{
+    return (HAL_GPIO_ReadPin(port, pin) == active_level) ? 1U : 0U;
+}
+
+static uint8_t read_raw_state(uint8_t seat_index)
+{
+    uint8_t belt = 0U;
+    uint8_t seat = 0U;
+
+    if (seat_index == 0U)
+    {
+        belt = read_gpio_as_1_if_match(SEAT0_BELT_GPIO_PORT,
+                                       SEAT0_BELT_GPIO_PIN,
+                                       SEAT_BELT_MONITOR_BELT_CLOSED_LEVEL);
+        seat = read_gpio_as_1_if_match(SEAT0_SEAT_GPIO_PORT,
+                                       SEAT0_SEAT_GPIO_PIN,
+                                       SEAT_BELT_MONITOR_SEAT_OCCUPIED_LEVEL);
     }
     else
     {
-        return (sensor[0] != 0u) ? 1u : 0u;
+        belt = read_gpio_as_1_if_match(SEAT1_BELT_GPIO_PORT,
+                                       SEAT1_BELT_GPIO_PIN,
+                                       SEAT_BELT_MONITOR_BELT_CLOSED_LEVEL);
+        seat = read_gpio_as_1_if_match(SEAT1_SEAT_GPIO_PORT,
+                                       SEAT1_SEAT_GPIO_PIN,
+                                       SEAT_BELT_MONITOR_SEAT_OCCUPIED_LEVEL);
     }
+
+    /* state = s1s0 = belt:seat. */
+    return (uint8_t)((belt << 1U) | seat);
 }
 
-static uint8_t SeatBeltMonitor_GetSeatBelted(const uint8_t sensor[4], uint8_t seat_index)
+static uint8_t get_order_state(uint8_t old_state, uint8_t new_state)
 {
-    if (seat_index == 0u)
+    if ((old_state > 3U) || (new_state > 3U))
     {
-        return (sensor[2] != 0u) ? 1u : 0u;
+        return SEAT_BELT_MONITOR_INVALID_ORDER_STATE;
     }
-    else
-    {
-        return (sensor[1] != 0u) ? 1u : 0u;
-    }
+
+    return s_transition_map[old_state][new_state];
 }
 
-static uint8_t SeatBeltMonitor_IsUnbeltOccupied(const uint8_t sensor[4], uint8_t seat_index)
+static void clear_candidate(seat_belt_monitor_seat_t *seat)
 {
-    uint8_t occupied;
-    uint8_t belted;
-
-    occupied = SeatBeltMonitor_GetSeatOccupied(sensor, seat_index);
-    belted = SeatBeltMonitor_GetSeatBelted(sensor, seat_index);
-
-    return ((occupied != 0u) && (belted == 0u)) ? 1u : 0u;
+    seat->candidate_state = UINT8_INVALID;
+    seat->candidate_order = SEAT_BELT_MONITOR_INVALID_ORDER_STATE;
+    seat->candidate_ticks = 0U;
 }
 
-static uint8_t SeatBeltMonitor_GetSeatOccupiedOnly(const uint8_t sensor[4], uint8_t seat_index)
-{
-    return SeatBeltMonitor_GetSeatOccupied(sensor, seat_index);
-}
-
-static void SeatBeltMonitor_GetConfig(uint8_t *buzz_sec, uint8_t *delay_sec)
-{
-    slave_payload_t *payload;
-
-    if ((buzz_sec == 0) || (delay_sec == 0))
-    {
-        return;
-    }
-
-    payload = (slave_payload_t *)payload_GetObject();
-    if (payload == 0)
-    {
-        *buzz_sec = 0u;
-        *delay_sec = 0u;
-        return;
-    }
-
-    *buzz_sec = payload->reserved[1];
-    *delay_sec = payload->reserved[2];
-}
-
-static void SeatBeltMonitor_StopOne(seat_belt_alarm_state_t *state)
-{
-    if (state == 0)
-    {
-        return;
-    }
-
-    state->unbelt_ticks = 0u;
-    state->buzzer_ticks_left = 0u;
-    state->alarm_active = 0u;
-    state->alarm_done_for_this_occupancy = 0u;
-}
-
-static void SeatBeltMonitor_ResetAll(void)
+static void fill_report_snapshot(uint8_t changed_seat_index, uint8_t changed_order_state)
 {
     uint8_t i;
 
-    for (i = 0u; i < SEAT_BELT_MONITOR_SEAT_NUM; i++)
+    if (s_report_pending != 0U)
     {
-        SeatBeltMonitor_StopOne(&g_seat_belt_monitor_ctx.seat[i]);
+        /* Old unsent data is intentionally discarded. */
+        s_event_drop_count++;
     }
 
-    BuzzerLed_SetMode(BUZZER_LED_DEV_BUZZER, BUZZER_LED_MODE_OFF);
-}
-
-static void SeatBeltMonitor_StartAlarm(seat_belt_alarm_state_t *state, uint8_t buzz_sec)
-{
-    if (state == 0)
+    s_event_seq++;
+    if (s_event_seq == 0U)
     {
-        return;
+        s_event_seq = 1U;
     }
 
-    if (buzz_sec == 0u)
+    (void)memset(&s_report_mailbox, 0, sizeof(s_report_mailbox));
+
+    s_report_mailbox.seq = s_event_seq;
+    s_report_mailbox.changed_seat_index = changed_seat_index;
+    s_report_mailbox.changed_order_state = changed_order_state;
+    s_report_mailbox.seat_count = SEAT_PORT_COUNT;
+
+    for (i = 0U; i < SEAT_PORT_COUNT; i++)
     {
-        state->alarm_active = 0u;
-        state->buzzer_ticks_left = 0u;
-        state->alarm_done_for_this_occupancy = 1u;
-        return;
-    }
+        s_report_mailbox.seat[i].enable = s_seat[i].enable;
+        s_report_mailbox.seat[i].seat_no = s_seat[i].seat_no;
 
-    state->alarm_active = 1u;
-    state->alarm_done_for_this_occupancy = 1u;
-
-    if (buzz_sec == 0xFFu)
-    {
-        state->buzzer_ticks_left = SEAT_BELT_MONITOR_FOREVER_TICK;
-    }
-    else
-    {
-        state->buzzer_ticks_left = (uint32_t)buzz_sec * SEAT_BELT_MONITOR_TICK_HZ;
-    }
-}
-
-/* ===== 对外接口 ===== */
-
-void SeatBeltMonitor_Init(void)
-{
-    memset(&g_seat_belt_monitor_ctx, 0, sizeof(g_seat_belt_monitor_ctx));
-}
-
-void SeatBeltMonitor_Tick10Hz(void)
-{
-    uint8_t sensor[4];
-    uint8_t buzz_sec;
-    uint8_t delay_sec;
-    uint32_t delay_ticks;
-    uint8_t seat_index;
-    uint8_t any_alarm_active = 0u;
-
-    if (BUS_MASTER_DEF != 0u)
-    {
-        //SeatBeltMonitor_ResetAll();
-        return;
-    }
-		bus_slave_t *slave_obj;
-		slave_obj = get_slave_obj();
-    memcpy(sensor, slave_obj->sensor_cache, sizeof(sensor));
-		
-    SeatBeltMonitor_GetConfig(&buzz_sec, &delay_sec);
-    delay_ticks = (uint32_t)delay_sec * SEAT_BELT_MONITOR_TICK_HZ;
-
-    for (seat_index = 0u; seat_index < SEAT_BELT_MONITOR_SEAT_NUM; seat_index++)
-    {
-        seat_belt_alarm_state_t *state = &g_seat_belt_monitor_ctx.seat[seat_index];
-        uint8_t occupied;
-        uint8_t unbelt_occupied;
-
-        occupied = SeatBeltMonitor_GetSeatOccupiedOnly(sensor, seat_index);
-        unbelt_occupied = SeatBeltMonitor_IsUnbeltOccupied(sensor, seat_index);
-
-        if (occupied == 0u)
+        if (s_seat[i].enable != 0U)
         {
-            /* 人离座，整次占座状态清零 */
-            SeatBeltMonitor_StopOne(state);
+            s_report_mailbox.seat[i].order_state = s_seat[i].current_order_state;
         }
         else
         {
-            if (unbelt_occupied != 0u)
-            {
-                if ((state->alarm_active == 0u) &&
-                    (state->alarm_done_for_this_occupancy == 0u))
-                {
-                    if (state->unbelt_ticks < delay_ticks)
-                    {
-                        state->unbelt_ticks++;
-                    }
-
-                    if (state->unbelt_ticks >= delay_ticks)
-                    {
-                        SeatBeltMonitor_StartAlarm(state, buzz_sec);
-                    }
-                }
-                else if (state->alarm_active != 0u)
-                {
-                    if (state->buzzer_ticks_left == SEAT_BELT_MONITOR_FOREVER_TICK)
-                    {
-                        /* 一直响 */
-                    }
-                    else if (state->buzzer_ticks_left > 0u)
-                    {
-                        state->buzzer_ticks_left--;
-
-                        if (state->buzzer_ticks_left == 0u)
-                        {
-                            /* 响完后保持 done 状态，但不再重新计时 */
-                            state->alarm_active = 0u;
-                        }
-                    }
-                    else
-                    {
-                        state->alarm_active = 0u;
-                    }
-                }
-                else
-                {
-                    /* 已经响过一次且人没离座，不再重复计时 */
-                }
-            }
-            else
-            {
-                /* 人还在，但已系安全带：
-                   停止当前报警，但保留本次占座已处理状态，不再重复提醒 */
-                state->unbelt_ticks = 0u;
-                state->buzzer_ticks_left = 0u;
-                state->alarm_active = 0u;
-            }
-        }
-
-        if (state->alarm_active != 0u)
-        {
-            if ((state->buzzer_ticks_left > 0u) ||
-                (state->buzzer_ticks_left == SEAT_BELT_MONITOR_FOREVER_TICK))
-            {
-                any_alarm_active = 1u;
-            }
+            s_report_mailbox.seat[i].order_state = SEAT_BELT_MONITOR_INVALID_ORDER_STATE;
         }
     }
 
-    if (any_alarm_active != 0u)
+    s_report_pending = 1U;
+}
+
+static void alarm_start_active(seat_belt_monitor_seat_t *seat)
+{
+    seat->alarm_phase = SEAT_BELT_ALARM_PHASE_ACTIVE;
+
+    if (slave_payload.seat_behavior.alarm_duration_s == 255U)
     {
-			if(BuzzerLed_GetMode(BUZZER_LED_DEV_BUZZER) != BUZZER_LED_MODE_SLOW_BLINK)
-        BuzzerLed_SetMode(BUZZER_LED_DEV_BUZZER, BUZZER_LED_MODE_SLOW_BLINK);
+        seat->alarm_duration_ticks = 0xFFFFU; /* until next confirmed state */
     }
     else
     {
-			if(BuzzerLed_GetMode(BUZZER_LED_DEV_BUZZER) != BUZZER_LED_MODE_OFF)
-        BuzzerLed_SetMode(BUZZER_LED_DEV_BUZZER, BUZZER_LED_MODE_OFF);
+        seat->alarm_duration_ticks = seconds_to_ticks(slave_payload.seat_behavior.alarm_duration_s);
+        if (seat->alarm_duration_ticks == 0U)
+        {
+            seat->alarm_phase = SEAT_BELT_ALARM_PHASE_NONE;
+        }
     }
+}
+
+static void alarm_reset_for_new_order(seat_belt_monitor_seat_t *seat, uint8_t order_state)
+{
+    uint8_t is_abnormal;
+
+    seat->alarm_phase = SEAT_BELT_ALARM_PHASE_NONE;
+    seat->alarm_delay_ticks = 0U;
+    seat->alarm_duration_ticks = 0U;
+
+    if (seat->enable == 0U)
+    {
+        return;
+    }
+
+    if (slave_payload.seat_behavior.alarm_duration_s == 0U)
+    {
+        return;
+    }
+
+    is_abnormal = order_mask_is_set(slave_payload.seat_behavior.abnormal_order_mask, order_state);
+    if (is_abnormal == 0U)
+    {
+        return;
+    }
+
+    seat->alarm_delay_ticks = seconds_to_ticks(slave_payload.seat_behavior.alarm_delay_s);
+    if (seat->alarm_delay_ticks > 0U)
+    {
+        seat->alarm_phase = SEAT_BELT_ALARM_PHASE_DELAY;
+    }
+    else
+    {
+        alarm_start_active(seat);
+    }
+}
+
+static void confirm_transition(uint8_t seat_index, uint8_t new_state, uint8_t order_state)
+{
+    seat_belt_monitor_seat_t *seat;
+
+    if ((is_valid_seat_index(seat_index) == 0U) || (is_order_state_valid(order_state) == 0U))
+    {
+        return;
+    }
+
+    seat = &s_seat[seat_index];
+    if (seat->enable == 0U)
+    {
+        return;
+    }
+
+    seat->stable_state = new_state;
+    seat->current_order_state = order_state;
+    clear_candidate(seat);
+
+    /* A confirmed transition on either seat generates one report containing both seats. */
+    fill_report_snapshot(seat_index, order_state);
+
+    alarm_reset_for_new_order(seat, order_state);
+}
+
+static void update_state_machine_for_seat(uint8_t seat_index)
+{
+    seat_belt_monitor_seat_t *seat;
+    uint8_t raw_state;
+    uint8_t order_state;
+    uint8_t filter_enabled;
+    uint16_t filter_ticks;
+
+    if (is_valid_seat_index(seat_index) == 0U)
+    {
+        return;
+    }
+
+    seat = &s_seat[seat_index];
+
+    if (seat->enable == 0U)
+    {
+        clear_candidate(seat);
+        seat->current_order_state = SEAT_BELT_MONITOR_INVALID_ORDER_STATE;
+        seat->alarm_phase = SEAT_BELT_ALARM_PHASE_NONE;
+        seat->alarm_delay_ticks = 0U;
+        seat->alarm_duration_ticks = 0U;
+        return;
+    }
+
+    raw_state = read_raw_state(seat_index);
+
+    if (raw_state == seat->stable_state)
+    {
+        clear_candidate(seat);
+        return;
+    }
+
+    order_state = get_order_state(seat->stable_state, raw_state);
+    if (is_order_state_valid(order_state) == 0U)
+    {
+        clear_candidate(seat);
+        return;
+    }
+
+    filter_enabled = order_mask_is_set(slave_payload.seat_behavior.filter_order_mask, order_state);
+    filter_ticks = seconds_to_ticks(slave_payload.seat_behavior.filter_time_s);
+
+    if ((filter_enabled == 0U) || (filter_ticks == 0U))
+    {
+        confirm_transition(seat_index, raw_state, order_state);
+        return;
+    }
+
+    if ((seat->candidate_state != raw_state) || (seat->candidate_order != order_state))
+    {
+        seat->candidate_state = raw_state;
+        seat->candidate_order = order_state;
+        seat->candidate_ticks = 1U;
+    }
+    else if (seat->candidate_ticks < 0xFFFFU)
+    {
+        seat->candidate_ticks++;
+    }
+
+    if (seat->candidate_ticks >= filter_ticks)
+    {
+        confirm_transition(seat_index, raw_state, order_state);
+    }
+}
+
+static void update_alarm_timer_for_seat(uint8_t seat_index)
+{
+    seat_belt_monitor_seat_t *seat;
+
+    if (is_valid_seat_index(seat_index) == 0U)
+    {
+        return;
+    }
+
+    seat = &s_seat[seat_index];
+    if (seat->enable == 0U)
+    {
+        seat->alarm_phase = SEAT_BELT_ALARM_PHASE_NONE;
+        return;
+    }
+
+    if (seat->alarm_phase == SEAT_BELT_ALARM_PHASE_DELAY)
+    {
+        if (seat->alarm_delay_ticks > 0U)
+        {
+            seat->alarm_delay_ticks--;
+        }
+
+        if (seat->alarm_delay_ticks == 0U)
+        {
+            alarm_start_active(seat);
+        }
+    }
+    else if (seat->alarm_phase == SEAT_BELT_ALARM_PHASE_ACTIVE)
+    {
+        if (slave_payload.seat_behavior.alarm_duration_s != 255U)
+        {
+            if (seat->alarm_duration_ticks > 0U)
+            {
+                seat->alarm_duration_ticks--;
+            }
+
+            if (seat->alarm_duration_ticks == 0U)
+            {
+                seat->alarm_phase = SEAT_BELT_ALARM_PHASE_NONE;
+            }
+        }
+    }
+    else
+    {
+        /* Nothing to do. */
+    }
+}
+
+static uint8_t any_seat_alarm_active(void)
+{
+    uint8_t i;
+
+    for (i = 0U; i < SEAT_PORT_COUNT; i++)
+    {
+        if ((s_seat[i].enable != 0U) &&
+            (s_seat[i].alarm_phase == SEAT_BELT_ALARM_PHASE_ACTIVE))
+        {
+            return 1U;
+        }
+    }
+
+    return 0U;
+}
+
+static void update_alarm_output(void)
+{
+    uint8_t active = any_seat_alarm_active();
+
+    if (active == s_alarm_output_active)
+    {
+        return;
+    }
+
+    s_alarm_output_active = active;
+
+    if (active != 0U)
+    {
+        BuzzerLed_SetMode(BUZZER_LED_DEV_BUZZER, BUZZER_LED_MODE_FAST_BLINK);
+#if (SEAT_BELT_MONITOR_USE_RED_LED != 0U)
+        BuzzerLed_SetMode(BUZZER_LED_DEV_LED_R, BUZZER_LED_MODE_ON);
+#endif
+    }
+    else
+    {
+        BuzzerLed_SetMode(BUZZER_LED_DEV_BUZZER, BUZZER_LED_MODE_OFF);
+#if (SEAT_BELT_MONITOR_USE_RED_LED != 0U)
+        BuzzerLed_SetMode(BUZZER_LED_DEV_LED_R, BUZZER_LED_MODE_OFF);
+#endif
+    }
+}
+
+void SeatBeltMonitor_Init(void)
+{
+    uint8_t i;
+
+    (void)memset(s_seat, 0, sizeof(s_seat));
+    SeatBeltMonitor_ClearReportEvents();
+
+    s_event_seq = 0U;
+    s_event_drop_count = 0U;
+    s_alarm_output_active = 0U;
+
+    for (i = 0U; i < SEAT_PORT_COUNT; i++)
+    {
+        s_seat[i].enable = ((uint8_t)(0x01&slave_payload.seat[i].enable) == SEAT_ENABLE_TRUE) ? 1U : 0U;
+        s_seat[i].seat_no = slave_payload.seat[i].seat_no;
+        s_seat[i].stable_state = read_raw_state(i);
+        s_seat[i].current_order_state = SEAT_BELT_MONITOR_INVALID_ORDER_STATE;
+        clear_candidate(&s_seat[i]);
+    }
+		if((slave_payload.reserved[0]&0x01) == 1)SEAT_BELT_MONITOR_SEAT_OCCUPIED_LEVEL = GPIO_PIN_SET;
+		if((slave_payload.reserved[0]&0x02) == 1)SEAT_BELT_MONITOR_BELT_CLOSED_LEVEL = GPIO_PIN_RESET;
+    BuzzerLed_SetMode(BUZZER_LED_DEV_BUZZER, BUZZER_LED_MODE_OFF);
+#if (SEAT_BELT_MONITOR_USE_RED_LED != 0U)
+    BuzzerLed_SetMode(BUZZER_LED_DEV_LED_R, BUZZER_LED_MODE_OFF);
+#endif
+}
+
+void SeatBeltMonitor_Task10Hz(void)
+{
+    uint8_t i;
+
+    for (i = 0U; i < SEAT_PORT_COUNT; i++)
+    {
+        update_state_machine_for_seat(i);
+        update_alarm_timer_for_seat(i);
+    }
+
+    update_alarm_output();
+}
+
+uint8_t SeatBeltMonitor_HasReportEvent(void)
+{
+    return (s_report_pending != 0U) ? 1U : 0U;
+}
+
+uint8_t SeatBeltMonitor_PopReportEvent(seat_belt_report_event_t *event)
+{
+    if ((event == NULL) || (s_report_pending == 0U))
+    {
+        return 0U;
+    }
+
+    *event = s_report_mailbox;
+    s_report_pending = 0U;
+
+    return 1U;
+}
+
+void SeatBeltMonitor_ClearReportEvents(void)
+{
+    s_report_pending = 0U;
+    (void)memset(&s_report_mailbox, 0, sizeof(s_report_mailbox));
+}
+
+uint16_t SeatBeltMonitor_GetDroppedEventCount(void)
+{
+    return s_event_drop_count;
+}
+
+uint8_t SeatBeltMonitor_GetStableState(uint8_t seat_index)
+{
+    if (is_valid_seat_index(seat_index) == 0U)
+    {
+        return UINT8_INVALID;
+    }
+
+    return s_seat[seat_index].stable_state;
+}
+
+uint8_t SeatBeltMonitor_GetCurrentOrderState(uint8_t seat_index)
+{
+    if (is_valid_seat_index(seat_index) == 0U)
+    {
+        return SEAT_BELT_MONITOR_INVALID_ORDER_STATE;
+    }
+
+    return s_seat[seat_index].current_order_state;
+}
+
+uint8_t SeatBeltMonitor_IsAlarmActive(void)
+{
+    return s_alarm_output_active;
 }

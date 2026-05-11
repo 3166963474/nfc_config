@@ -50,7 +50,3 @@ bus_seat_v0_0_3\infinite_protocol.o: C:\Users\InfiniteXD\AppData\Local\Keil_v5\A
 bus_seat_v0_0_3\infinite_protocol.o: C:\Users\InfiniteXD\AppData\Local\Keil_v5\ARM\ARMCC\Bin\..\include\math.h
 bus_seat_v0_0_3\infinite_protocol.o: ./PAN_Driver/pan_rf.h
 bus_seat_v0_0_3\infinite_protocol.o: ./User/e290_hal.h
-bus_seat_v0_0_3\infinite_protocol.o: User\bus_master.h
-bus_seat_v0_0_3\infinite_protocol.o: C:\Users\InfiniteXD\AppData\Local\Keil_v5\ARM\ARMCC\Bin\..\include\string.h
-bus_seat_v0_0_3\infinite_protocol.o: User\rs485bsp.h
-bus_seat_v0_0_3\infinite_protocol.o: User\bus_rand.h

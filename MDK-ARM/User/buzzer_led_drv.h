@@ -21,6 +21,8 @@ typedef enum
     BUZZER_LED_DEV_MAX
 } buzzer_led_dev_t;
 
+//led和蜂鸣器通过内部状态机维持行为，只需要设定一次即可保持运行。
+
 /* 初始化 */
 void BuzzerLed_Init(void);
 

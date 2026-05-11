@@ -51,7 +51,3 @@ bus_seat_v0_0_3\pan_rf.o: ./User/rs485bsp.h
 bus_seat_v0_0_3\pan_rf.o: ./User/app_st25dv.h
 bus_seat_v0_0_3\pan_rf.o: ../Drivers/BSP/Components/ST25DV/st25dv.h
 bus_seat_v0_0_3\pan_rf.o: ../Drivers/BSP/Components/ST25DV/st25dv_reg.h
-bus_seat_v0_0_3\pan_rf.o: ./User/bus_master.h
-bus_seat_v0_0_3\pan_rf.o: C:\Users\InfiniteXD\AppData\Local\Keil_v5\ARM\ARMCC\Bin\..\include\string.h
-bus_seat_v0_0_3\pan_rf.o: ./User/rs485bsp.h
-bus_seat_v0_0_3\pan_rf.o: ./User/bus_rand.h

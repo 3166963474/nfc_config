@@ -22,16 +22,136 @@ Dialog DLL:      TCM.DLL V1.56.6.0
  
 <h2>Project:</h2>
 C:\Users\InfiniteXD\Desktop\XD_Prc\cube_prj\BUS_SEAT_V0_0_3\MDK-ARM\BUS_SEAT_V0_0_3.uvprojx
-Project File Date:  04/26/2026
+Project File Date:  05/10/2026
 
 <h2>Output:</h2>
 *** Using Compiler 'V5.06 update 6 (build 750)', folder: 'C:\Users\InfiniteXD\AppData\Local\Keil_v5\ARM\ARMCC\Bin'
 Build target 'BUS_SEAT_V0_0_3'
-compiling bus_master.c...
+compiling rs485bsp.c...
+User\rs485bsp.h(24): warning:  #47-D: incompatible redefinition of macro "RS485_FEATURE_NONE"  (declared at line 50 of "User\app_st25dv.h")
+  #define RS485_FEATURE_NONE                0x00u
+User\rs485bsp.h(25): warning:  #47-D: incompatible redefinition of macro "RS485_FEATURE_JSON_OUT"  (declared at line 51 of "User\app_st25dv.h")
+  #define RS485_FEATURE_JSON_OUT            0x01u  /* Output report frame to upper computer. */
+User\rs485bsp.h(26): warning:  #47-D: incompatible redefinition of macro "RS485_FEATURE_FORWARD_TO_OTHER"  (declared at line 52 of "User\app_st25dv.h")
+  #define RS485_FEATURE_FORWARD_TO_OTHER    0x02u  /* Forward received data to the other 485 port. */
+User\rs485bsp.h(27): warning:  #47-D: incompatible redefinition of macro "RS485_FEATURE_LOG_OUT"  (declared at line 53 of "User\app_st25dv.h")
+  #define RS485_FEATURE_LOG_OUT             0x04u  /* Optional diagnostic output. */
+User\rs485bsp.h(28): warning:  #47-D: incompatible redefinition of macro "RS485_FEATURE_VALID_MASK"  (declared at line 54 of "User\app_st25dv.h")
+  #define RS485_FEATURE_VALID_MASK          (RS485_FEATURE_JSON_OUT | \
+User\rs485bsp.c(829): warning:  #1-D: last line of file ends without a newline
+  }
+User\rs485bsp.c: 6 warnings, 0 errors
+compiling e290_demo.c...
+User\rs485bsp.h(24): warning:  #47-D: incompatible redefinition of macro "RS485_FEATURE_NONE"  (declared at line 50 of "User\app_st25dv.h")
+  #define RS485_FEATURE_NONE                0x00u
+User\rs485bsp.h(25): warning:  #47-D: incompatible redefinition of macro "RS485_FEATURE_JSON_OUT"  (declared at line 51 of "User\app_st25dv.h")
+  #define RS485_FEATURE_JSON_OUT            0x01u  /* Output report frame to upper computer. */
+User\rs485bsp.h(26): warning:  #47-D: incompatible redefinition of macro "RS485_FEATURE_FORWARD_TO_OTHER"  (declared at line 52 of "User\app_st25dv.h")
+  #define RS485_FEATURE_FORWARD_TO_OTHER    0x02u  /* Forward received data to the other 485 port. */
+User\rs485bsp.h(27): warning:  #47-D: incompatible redefinition of macro "RS485_FEATURE_LOG_OUT"  (declared at line 53 of "User\app_st25dv.h")
+  #define RS485_FEATURE_LOG_OUT             0x04u  /* Optional diagnostic output. */
+User\rs485bsp.h(28): warning:  #47-D: incompatible redefinition of macro "RS485_FEATURE_VALID_MASK"  (declared at line 54 of "User\app_st25dv.h")
+  #define RS485_FEATURE_VALID_MASK          (RS485_FEATURE_JSON_OUT | \
+User\e290_demo.c: 5 warnings, 0 errors
+compiling infinite_protocol.c...
+User\rs485bsp.h(24): warning:  #47-D: incompatible redefinition of macro "RS485_FEATURE_NONE"  (declared at line 50 of "User\app_st25dv.h")
+  #define RS485_FEATURE_NONE                0x00u
+User\rs485bsp.h(25): warning:  #47-D: incompatible redefinition of macro "RS485_FEATURE_JSON_OUT"  (declared at line 51 of "User\app_st25dv.h")
+  #define RS485_FEATURE_JSON_OUT            0x01u  /* Output report frame to upper computer. */
+User\rs485bsp.h(26): warning:  #47-D: incompatible redefinition of macro "RS485_FEATURE_FORWARD_TO_OTHER"  (declared at line 52 of "User\app_st25dv.h")
+  #define RS485_FEATURE_FORWARD_TO_OTHER    0x02u  /* Forward received data to the other 485 port. */
+User\rs485bsp.h(27): warning:  #47-D: incompatible redefinition of macro "RS485_FEATURE_LOG_OUT"  (declared at line 53 of "User\app_st25dv.h")
+  #define RS485_FEATURE_LOG_OUT             0x04u  /* Optional diagnostic output. */
+User\rs485bsp.h(28): warning:  #47-D: incompatible redefinition of macro "RS485_FEATURE_VALID_MASK"  (declared at line 54 of "User\app_st25dv.h")
+  #define RS485_FEATURE_VALID_MASK          (RS485_FEATURE_JSON_OUT | \
+User\infinite_protocol.c: 5 warnings, 0 errors
+compiling seat_belt_monitor.c...
+compiling bus_master_report.c...
+User\rs485bsp.h(24): warning:  #47-D: incompatible redefinition of macro "RS485_FEATURE_NONE"  (declared at line 50 of "User\app_st25dv.h")
+  #define RS485_FEATURE_NONE                0x00u
+User\rs485bsp.h(25): warning:  #47-D: incompatible redefinition of macro "RS485_FEATURE_JSON_OUT"  (declared at line 51 of "User\app_st25dv.h")
+  #define RS485_FEATURE_JSON_OUT            0x01u  /* Output report frame to upper computer. */
+User\rs485bsp.h(26): warning:  #47-D: incompatible redefinition of macro "RS485_FEATURE_FORWARD_TO_OTHER"  (declared at line 52 of "User\app_st25dv.h")
+  #define RS485_FEATURE_FORWARD_TO_OTHER    0x02u  /* Forward received data to the other 485 port. */
+User\rs485bsp.h(27): warning:  #47-D: incompatible redefinition of macro "RS485_FEATURE_LOG_OUT"  (declared at line 53 of "User\app_st25dv.h")
+  #define RS485_FEATURE_LOG_OUT             0x04u  /* Optional diagnostic output. */
+User\rs485bsp.h(28): warning:  #47-D: incompatible redefinition of macro "RS485_FEATURE_VALID_MASK"  (declared at line 54 of "User\app_st25dv.h")
+  #define RS485_FEATURE_VALID_MASK          (RS485_FEATURE_JSON_OUT | \
+User\bus_master_report.c(240): warning:  #167-D: argument of type "uint8_t *" is incompatible with parameter of type "char *"
+  		float_to_str_2(awdawf,16,RxDoneParams.Snr);
+User\bus_master_report.c: 6 warnings, 0 errors
+compiling bus_slave_report.c...
+User\rs485bsp.h(24): warning:  #47-D: incompatible redefinition of macro "RS485_FEATURE_NONE"  (declared at line 50 of "User\app_st25dv.h")
+  #define RS485_FEATURE_NONE                0x00u
+User\rs485bsp.h(25): warning:  #47-D: incompatible redefinition of macro "RS485_FEATURE_JSON_OUT"  (declared at line 51 of "User\app_st25dv.h")
+  #define RS485_FEATURE_JSON_OUT            0x01u  /* Output report frame to upper computer. */
+User\rs485bsp.h(26): warning:  #47-D: incompatible redefinition of macro "RS485_FEATURE_FORWARD_TO_OTHER"  (declared at line 52 of "User\app_st25dv.h")
+  #define RS485_FEATURE_FORWARD_TO_OTHER    0x02u  /* Forward received data to the other 485 port. */
+User\rs485bsp.h(27): warning:  #47-D: incompatible redefinition of macro "RS485_FEATURE_LOG_OUT"  (declared at line 53 of "User\app_st25dv.h")
+  #define RS485_FEATURE_LOG_OUT             0x04u  /* Optional diagnostic output. */
+User\rs485bsp.h(28): warning:  #47-D: incompatible redefinition of macro "RS485_FEATURE_VALID_MASK"  (declared at line 54 of "User\app_st25dv.h")
+  #define RS485_FEATURE_VALID_MASK          (RS485_FEATURE_JSON_OUT | \
+User\bus_slave_report.c: 5 warnings, 0 errors
+compiling main.c...
+./User/rs485bsp.h(24): warning:  #47-D: incompatible redefinition of macro "RS485_FEATURE_NONE"  (declared at line 50 of "./User/app_st25dv.h")
+  #define RS485_FEATURE_NONE                0x00u
+./User/rs485bsp.h(25): warning:  #47-D: incompatible redefinition of macro "RS485_FEATURE_JSON_OUT"  (declared at line 51 of "./User/app_st25dv.h")
+  #define RS485_FEATURE_JSON_OUT            0x01u  /* Output report frame to upper computer. */
+./User/rs485bsp.h(26): warning:  #47-D: incompatible redefinition of macro "RS485_FEATURE_FORWARD_TO_OTHER"  (declared at line 52 of "./User/app_st25dv.h")
+  #define RS485_FEATURE_FORWARD_TO_OTHER    0x02u  /* Forward received data to the other 485 port. */
+./User/rs485bsp.h(27): warning:  #47-D: incompatible redefinition of macro "RS485_FEATURE_LOG_OUT"  (declared at line 53 of "./User/app_st25dv.h")
+  #define RS485_FEATURE_LOG_OUT             0x04u  /* Optional diagnostic output. */
+./User/rs485bsp.h(28): warning:  #47-D: incompatible redefinition of macro "RS485_FEATURE_VALID_MASK"  (declared at line 54 of "./User/app_st25dv.h")
+  #define RS485_FEATURE_VALID_MASK          (RS485_FEATURE_JSON_OUT | \
+../Core/Src/main.c(126): warning:  #223-D: function "bus_rand_init" declared implicitly
+  	bus_rand_init();
+../Core/Src/main.c(182): warning:  #128-D: loop is not reachable
+    while (1)
+../Core/Src/main.c: 7 warnings, 0 errors
+compiling app_st25dv.c...
+User\rs485bsp.h(24): warning:  #47-D: incompatible redefinition of macro "RS485_FEATURE_NONE"  (declared at line 50 of "User\app_st25dv.h")
+  #define RS485_FEATURE_NONE                0x00u
+User\rs485bsp.h(25): warning:  #47-D: incompatible redefinition of macro "RS485_FEATURE_JSON_OUT"  (declared at line 51 of "User\app_st25dv.h")
+  #define RS485_FEATURE_JSON_OUT            0x01u  /* Output report frame to upper computer. */
+User\rs485bsp.h(26): warning:  #47-D: incompatible redefinition of macro "RS485_FEATURE_FORWARD_TO_OTHER"  (declared at line 52 of "User\app_st25dv.h")
+  #define RS485_FEATURE_FORWARD_TO_OTHER    0x02u  /* Forward received data to the other 485 port. */
+User\rs485bsp.h(27): warning:  #47-D: incompatible redefinition of macro "RS485_FEATURE_LOG_OUT"  (declared at line 53 of "User\app_st25dv.h")
+  #define RS485_FEATURE_LOG_OUT             0x04u  /* Optional diagnostic output. */
+User\rs485bsp.h(28): warning:  #47-D: incompatible redefinition of macro "RS485_FEATURE_VALID_MASK"  (declared at line 54 of "User\app_st25dv.h")
+  #define RS485_FEATURE_VALID_MASK          (RS485_FEATURE_JSON_OUT | \
+User\app_st25dv.c(197): warning:  #223-D: function "ST25DV_ConfigureGPO" declared implicitly
+      ret = ST25DV_ConfigureGPO(pObj, gpo_cfg);
+User\app_st25dv.c(244): warning:  #223-D: function "ST25DV_Init" declared implicitly
+      ST25DV_Init(&s_st25dv_obj);
+User\app_st25dv.c(289): warning:  #223-D: function "ST25DV_ReadID" declared implicitly
+      return APP_ST25DV_FromDrvStatus(ST25DV_ReadID(&s_st25dv_obj, pId));
+User\app_st25dv.c(334): warning:  #223-D: function "ST25DV_ReadData" declared implicitly
+      return APP_ST25DV_FromDrvStatus(ST25DV_ReadData(&s_st25dv_obj, pData, addr, len));
+User\app_st25dv.c(349): warning:  #223-D: function "ST25DV_WriteData" declared implicitly
+      return APP_ST25DV_FromDrvStatus(ST25DV_WriteData(&s_st25dv_obj, pData, addr, len));
+User\app_st25dv.c(389): warning:  #223-D: function "ST25DV_IsDeviceReady" declared implicitly
+      return APP_ST25DV_FromDrvStatus(ST25DV_IsDeviceReady(&s_st25dv_obj, trials));
+User\app_st25dv.c(694): warning:  #186-D: pointless comparison of unsigned integer with zero
+      if ((master->vehicle_id < VEHICLE_ID_MIN) ||
+User\app_st25dv.c(753): warning:  #186-D: pointless comparison of unsigned integer with zero
+      if ((slave->vehicle_id < VEHICLE_ID_MIN) ||
+User\app_st25dv.c: 13 warnings, 0 errors
+compiling pan_rf.c...
+./User/rs485bsp.h(24): warning:  #47-D: incompatible redefinition of macro "RS485_FEATURE_NONE"  (declared at line 50 of "./User/app_st25dv.h")
+  #define RS485_FEATURE_NONE                0x00u
+./User/rs485bsp.h(25): warning:  #47-D: incompatible redefinition of macro "RS485_FEATURE_JSON_OUT"  (declared at line 51 of "./User/app_st25dv.h")
+  #define RS485_FEATURE_JSON_OUT            0x01u  /* Output report frame to upper computer. */
+./User/rs485bsp.h(26): warning:  #47-D: incompatible redefinition of macro "RS485_FEATURE_FORWARD_TO_OTHER"  (declared at line 52 of "./User/app_st25dv.h")
+  #define RS485_FEATURE_FORWARD_TO_OTHER    0x02u  /* Forward received data to the other 485 port. */
+./User/rs485bsp.h(27): warning:  #47-D: incompatible redefinition of macro "RS485_FEATURE_LOG_OUT"  (declared at line 53 of "./User/app_st25dv.h")
+  #define RS485_FEATURE_LOG_OUT             0x04u  /* Optional diagnostic output. */
+./User/rs485bsp.h(28): warning:  #47-D: incompatible redefinition of macro "RS485_FEATURE_VALID_MASK"  (declared at line 54 of "./User/app_st25dv.h")
+  #define RS485_FEATURE_VALID_MASK          (RS485_FEATURE_JSON_OUT | \
+PAN_Driver\pan_rf.c: 5 warnings, 0 errors
 linking...
-Program Size: Code=39782 RO-data=1890 RW-data=136 ZI-data=8880  
+Program Size: Code=44578 RO-data=1914 RW-data=9012 ZI-data=4292  
 FromELF: creating hex file...
-"BUS_SEAT_V0_0_3\BUS_SEAT_V0_0_3.axf" - 0 Error(s), 0 Warning(s).
+"BUS_SEAT_V0_0_3\BUS_SEAT_V0_0_3.axf" - 0 Error(s), 52 Warning(s).
 
 <h2>Software Packages used:</h2>
 

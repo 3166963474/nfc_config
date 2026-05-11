@@ -2517,7 +2517,9 @@ RF_Err_t rf_set_default_para(void)
     RF_ASSERT(rf_set_tx_power(rf_config_obj->pwr));//功率
     
     RF_ASSERT(rf_set_dcdc_mode(DCDC_OFF));//关闭DCDC供电寄存器
-    
+    UART_DBG_Printf_DMA("read_freq=%lu pwr=%u\r\n",
+                    rf_read_freq(),
+                    rf_get_tx_power());
     return OK;
 }
 

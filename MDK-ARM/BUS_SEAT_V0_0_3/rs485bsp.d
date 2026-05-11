@@ -49,9 +49,6 @@ bus_seat_v0_0_3\rs485bsp.o: C:\Users\InfiniteXD\AppData\Local\Keil_v5\ARM\ARMCC\
 bus_seat_v0_0_3\rs485bsp.o: C:\Users\InfiniteXD\AppData\Local\Keil_v5\ARM\ARMCC\Bin\..\include\math.h
 bus_seat_v0_0_3\rs485bsp.o: ./PAN_Driver/pan_rf.h
 bus_seat_v0_0_3\rs485bsp.o: ./User/e290_hal.h
-bus_seat_v0_0_3\rs485bsp.o: User\bus_master.h
-bus_seat_v0_0_3\rs485bsp.o: C:\Users\InfiniteXD\AppData\Local\Keil_v5\ARM\ARMCC\Bin\..\include\string.h
-bus_seat_v0_0_3\rs485bsp.o: User\rs485bsp.h
-bus_seat_v0_0_3\rs485bsp.o: User\bus_rand.h
 bus_seat_v0_0_3\rs485bsp.o: ../Core/Inc/usart.h
+bus_seat_v0_0_3\rs485bsp.o: C:\Users\InfiniteXD\AppData\Local\Keil_v5\ARM\ARMCC\Bin\..\include\string.h
 bus_seat_v0_0_3\rs485bsp.o: C:\Users\InfiniteXD\AppData\Local\Keil_v5\ARM\ARMCC\Bin\..\include\stdarg.h

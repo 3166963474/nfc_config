@@ -58,10 +58,8 @@ bus_seat_v0_0_3\main.o: ./User/rs485bsp.h
 bus_seat_v0_0_3\main.o: ./User/app_st25dv.h
 bus_seat_v0_0_3\main.o: ../Drivers/BSP/Components/ST25DV/st25dv.h
 bus_seat_v0_0_3\main.o: ../Drivers/BSP/Components/ST25DV/st25dv_reg.h
-bus_seat_v0_0_3\main.o: ./User/bus_master.h
-bus_seat_v0_0_3\main.o: ./User/rs485bsp.h
-bus_seat_v0_0_3\main.o: ./User/bus_rand.h
-bus_seat_v0_0_3\main.o: ./User/bus_slave.h
+bus_seat_v0_0_3\main.o: ./User/bus_master_report.h
+bus_seat_v0_0_3\main.o: ./User/bus_slave_report.h
+bus_seat_v0_0_3\main.o: ./User/seat_belt_monitor.h
 bus_seat_v0_0_3\main.o: ./User/flash_storage.h
 bus_seat_v0_0_3\main.o: ./User/buzzer_led_drv.h
-bus_seat_v0_0_3\main.o: ./User/seat_belt_monitor.h

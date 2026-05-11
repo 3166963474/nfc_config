@@ -886,16 +886,6 @@
               <FilePath>.\User\rs485bsp.c</FilePath>
             </File>
             <File>
-              <FileName>bus_master.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>.\User\bus_master.c</FilePath>
-            </File>
-            <File>
-              <FileName>bus_slave.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>.\User\bus_slave.c</FilePath>
-            </File>
-            <File>
               <FileName>bus_rand.c</FileName>
               <FileType>1</FileType>
               <FilePath>.\User\bus_rand.c</FilePath>
@@ -924,6 +914,16 @@
               <FileName>seat_belt_monitor.c</FileName>
               <FileType>1</FileType>
               <FilePath>.\User\seat_belt_monitor.c</FilePath>
+            </File>
+            <File>
+              <FileName>bus_slave_report.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\User\bus_slave_report.c</FilePath>
+            </File>
+            <File>
+              <FileName>bus_master_report.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\User\bus_master_report.c</FilePath>
             </File>
           </Files>
         </Group>

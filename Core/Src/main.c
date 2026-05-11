@@ -32,8 +32,8 @@
 #include "pan_rf.h"
 #include "e290_demo.h"
 #include "rs485bsp.h"
-#include "bus_master.h"
-#include "bus_slave.h"
+#include "bus_master_report.h"
+#include "bus_slave_report.h"
 #include "flash_storage.h"
 #include "st25dv.h"
 #include "app_st25dv.h"
@@ -74,8 +74,6 @@ void SystemClock_Config(void);
 uint8_t BUS_MASTER_DEF= 1;
 uint8_t UART_DEBUG = 1;
 
-static bus_master_t g_bus_master;
-static bus_slave_t g_bus_slave;
 extern struct RxDoneMsg RxDoneParams;
 
 
@@ -133,10 +131,11 @@ int main(void)
 	{
 		HAL_TIM_Base_Start_IT(&htim4);
 		UART_DBG_Printf_DMA("No valid config!!!\r\n");
-		BuzzerLed_SetMode(BUZZER_LED_DEV_LED_G,BUZZER_LED_MODE_FAST_BLINK);
+		BuzzerLed_SetMode(BUZZER_LED_DEV_LED_G,BUZZER_LED_MODE_SLOW_BLINK);
 		while(1);
 	}
 	else UART_DBG_Printf_DMA("Config loaded\r\n");
+	RS485BSP_Init();
 	HAL_TIM_Base_Start_IT(&htim4);
 	
 	if(rf_init() != OK)
@@ -154,26 +153,34 @@ int main(void)
 		
 	if(BUS_MASTER_DEF)
 	{
-		bus_master_init(&g_bus_master);
-		bus_master_start(&g_bus_master);
+    bus_master_report_init(get_master_report_obj());
+    bus_master_report_start(get_master_report_obj());
+		while(1)
+		{
+			rf_irq_process();
+      bus_master_report_task(get_master_report_obj(), HAL_GetTick());
+		}
 	}
 	else
 	{
 		SeatBeltMonitor_Init();
-		bus_slave_init(&g_bus_slave, 0x12, 0x00);
-		bus_slave_start(&g_bus_slave);
+		bus_slave_report_t *report = get_slave_report_obj();
+
+		bus_slave_report_init(report);
+		bus_slave_report_start(report);
+		HAL_Delay(20);
+		while(1)
+		{
+			rf_irq_process();
+			bus_slave_report_task(report, BSP_GetTick());
+		}
 	}
-		
-	HAL_Delay(20);
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-		rf_irq_process();
-		if(BUS_MASTER_DEF) bus_master_task(&g_bus_master, HAL_GetTick());
-		else bus_slave_task(&g_bus_slave);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -232,7 +239,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
 	nfc_task_in_tim();
 	BuzzerLed_Tick10Hz();
-	SeatBeltMonitor_Tick10Hz();
+	SeatBeltMonitor_Task10Hz();
 }
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
@@ -242,14 +249,6 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
     }
 }
 
-bus_master_t *get_master_obj(void)
-{
-	return &g_bus_master;
-}
-bus_slave_t *get_slave_obj(void)
-{
-	return &g_bus_slave;
-}
 /* USER CODE END 4 */
 
 /**

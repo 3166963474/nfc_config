@@ -53,6 +53,3 @@ bus_seat_v0_0_3\e290_demo.o: User\rs485bsp.h
 bus_seat_v0_0_3\e290_demo.o: User\app_st25dv.h
 bus_seat_v0_0_3\e290_demo.o: ../Drivers/BSP/Components/ST25DV/st25dv.h
 bus_seat_v0_0_3\e290_demo.o: ../Drivers/BSP/Components/ST25DV/st25dv_reg.h
-bus_seat_v0_0_3\e290_demo.o: User\bus_master.h
-bus_seat_v0_0_3\e290_demo.o: User\rs485bsp.h
-bus_seat_v0_0_3\e290_demo.o: User\bus_rand.h

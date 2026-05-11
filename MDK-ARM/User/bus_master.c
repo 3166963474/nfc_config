@@ -81,7 +81,7 @@ static void bus_enter_wait_cad_idle(bus_master_t *master, uint32_t now_ms)
     master->channel_owned = false;
     master->round_active = false;
 		rf_set_mode(RF_MODE_STB3);
-//    bus_enter_rx_mode();
+    bus_enter_rx_mode();
 }
 static void bus_start_contend_backoff(bus_master_t *master, uint32_t now_ms)
 {
@@ -451,9 +451,6 @@ void bus_master_task(bus_master_t *master, uint32_t now_ms)
 							UART_DBG_Printf_DMA("Start wait cad\r\n");
 							}
               master->cad_idle_start_tick = now_ms;
-							bus_enter_rx_mode();
-							//把bus_enter_wait_cad_idle()中的bus_enter_rx_mode()调用上应该能把此处的删掉
-							//但并未实测。
             }
             else if ((now_ms - master->cad_idle_start_tick) >= master->cad_idle_ms)
             {

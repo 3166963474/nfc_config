@@ -48,9 +48,6 @@ bus_seat_v0_0_3\app_st25dv.o: ../Core/Inc/custom_bus.h
 bus_seat_v0_0_3\app_st25dv.o: ../Core/Inc/custom_conf.h
 bus_seat_v0_0_3\app_st25dv.o: ../Core/Inc/custom_errno.h
 bus_seat_v0_0_3\app_st25dv.o: ./User/e290_hal.h
-bus_seat_v0_0_3\app_st25dv.o: User\bus_master.h
 bus_seat_v0_0_3\app_st25dv.o: C:\Users\InfiniteXD\AppData\Local\Keil_v5\ARM\ARMCC\Bin\..\include\string.h
 bus_seat_v0_0_3\app_st25dv.o: User\rs485bsp.h
-bus_seat_v0_0_3\app_st25dv.o: User\app_st25dv.h
-bus_seat_v0_0_3\app_st25dv.o: User\bus_rand.h
 bus_seat_v0_0_3\app_st25dv.o: User\flash_storage.h

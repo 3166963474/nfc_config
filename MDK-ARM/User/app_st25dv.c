@@ -9,107 +9,45 @@ master_payload_t master_payload;
 
 static uint16_t APP_ST25DV_GetFrameLenByType(uint8_t type)
 {
-    return (type == FRAME_MASTER_TYPE) ? FRAME_MASTER_LEN : FRAME_SLAVE_LEN;
-}
-
-static uint16_t APP_ST25DV_GetPayloadLenByType(uint8_t type)
-{
-    return (type == FRAME_MASTER_TYPE) ? FRAME_MASTER_PAYLOAD_LEN : FRAME_SLAVE_PAYLOAD_LEN;
-}
-
-static void APP_ST25DV_SetReservedValid(uint8_t *buf)
-{
-    if (buf != NULL)
-    {
-        buf[RESERVED_OFFSET_IN_FRAME] |= RESERVED_VALID_MASK;
-    }
-}
-
-static uint8_t APP_ST25DV_IsReservedValid(const uint8_t *buf)
-{
-    if (buf == NULL)
-    {
-        return 0U;
-    }
-
-    return ((buf[RESERVED_OFFSET_IN_FRAME] & RESERVED_VALID_MASK) != 0U) ? 1U : 0U;
-}
-
-static void APP_ST25DV_CopyReservedFromFrame(uint8_t *dst_buf, const uint8_t *src_buf)
-{
-    if ((dst_buf == NULL) || (src_buf == NULL))
-    {
-        return;
-    }
-
-    memcpy(dst_buf + RESERVED_OFFSET_IN_FRAME,
-           src_buf + RESERVED_OFFSET_IN_FRAME,
-           RESERVED_LEN);
-}
-
-static void APP_ST25DV_UpdateFrameCrc(uint8_t *buf)
-{
-    uint16_t frame_len;
-    uint32_t crc;
-
-    if (buf == NULL)
-    {
-        return;
-    }
-
-    frame_len = APP_ST25DV_GetFrameLenByType(buf[FRAME_OFFSET_TYPE]);
-    crc = storage_crc32(buf, frame_len);
-    memcpy(buf + frame_len, &crc, sizeof(crc));
-}
-
-
-
-
-
-
-static uint16_t app_get_frame_len_by_type(uint8_t type)
-{
     switch (type)
     {
         case FRAME_MASTER_TYPE:
-            return (FRAME_MASTER_LEN + 4U); /* + CRC32 */
+            return FRAME_MASTER_LEN;
+
         case FRAME_SLAVE_TYPE:
-            return (FRAME_SLAVE_LEN + 4U);  /* + CRC32 */
+            return FRAME_SLAVE_LEN;
+
         default:
             return 0U;
     }
 }
 
-static uint16_t app_get_payload_len_by_type(uint8_t type)
+static uint16_t APP_ST25DV_GetPayloadLenByType(uint8_t type)
 {
     switch (type)
     {
         case FRAME_MASTER_TYPE:
             return FRAME_MASTER_PAYLOAD_LEN;
+
         case FRAME_SLAVE_TYPE:
             return FRAME_SLAVE_PAYLOAD_LEN;
+
         default:
             return 0U;
     }
 }
 
-static void app_set_reserved_valid(uint8_t type, uint8_t *payload_buf)
+static uint16_t APP_ST25DV_GetTotalFrameLenByType(uint8_t type)
 {
-    if (payload_buf == NULL)
+    uint16_t frame_len;
+
+    frame_len = APP_ST25DV_GetFrameLenByType(type);
+    if (frame_len == 0U)
     {
-        return;
+        return 0U;
     }
 
-    if (type == FRAME_MASTER_TYPE)
-    {
-        master_payload_t *p = (master_payload_t *)payload_buf;
-        p->reserved[0] |= RESERVED_VALID_MASK;
-    }
-    else if (type == FRAME_SLAVE_TYPE)
-    {
-        slave_payload_t *p = (slave_payload_t *)payload_buf;
-        p->reserved[0] |= RESERVED_VALID_MASK;
-    }
+    return FRAME_TOTAL_LEN(frame_len);
 }
 
 static APP_ST25DV_Status_t app_build_frame_from_current_payload(uint32_t unix_time,
@@ -119,7 +57,8 @@ static APP_ST25DV_Status_t app_build_frame_from_current_payload(uint32_t unix_ti
 {
     uint8_t type;
     uint16_t payload_len;
-    uint16_t frame_len;
+    uint16_t frame_len_without_crc;
+    uint16_t frame_len_total;
     uint32_t crc;
 
     if ((frame_buf == NULL) || (out_frame_len == NULL))
@@ -130,57 +69,48 @@ static APP_ST25DV_Status_t app_build_frame_from_current_payload(uint32_t unix_ti
     if (BUS_MASTER_DEF)
     {
         type = FRAME_MASTER_TYPE;
-        payload_len = FRAME_MASTER_PAYLOAD_LEN;
-        frame_len = FRAME_MASTER_LEN + 4U;
     }
     else
     {
         type = FRAME_SLAVE_TYPE;
-        payload_len = FRAME_SLAVE_PAYLOAD_LEN;
-        frame_len = FRAME_SLAVE_LEN + 4U;
     }
 
-    if (frame_buf_size < frame_len)
+    payload_len = APP_ST25DV_GetPayloadLenByType(type);
+    frame_len_without_crc = APP_ST25DV_GetFrameLenByType(type);
+    frame_len_total = APP_ST25DV_GetTotalFrameLenByType(type);
+
+    if ((payload_len == 0U) || (frame_len_without_crc == 0U) || (frame_len_total == 0U))
+    {
+        return APP_ST25DV_ERROR;
+    }
+
+    if (frame_buf_size < frame_len_total)
     {
         return APP_ST25DV_INVALID_PARAM;
     }
 
     memset(frame_buf, 0, frame_buf_size);
 
-    /* SOF */
     frame_buf[FRAME_OFFSET_SOF] = FRAME_SOF;
-
-    /* TIME */
     memcpy(&frame_buf[FRAME_OFFSET_TIME], &unix_time, sizeof(unix_time));
-
-    /* TYPE */
     frame_buf[FRAME_OFFSET_TYPE] = type;
 
-    /* PAYLOAD */
     if (type == FRAME_MASTER_TYPE)
     {
-        memcpy(frame_buf + FRAME_OFFSET_PAYLOAD,
-               &master_payload,
-               payload_len);
+        memcpy(frame_buf + FRAME_OFFSET_PAYLOAD, &master_payload, payload_len);
     }
     else
     {
-        memcpy(frame_buf + FRAME_OFFSET_PAYLOAD,
-               &slave_payload,
-               payload_len);
+        memcpy(frame_buf + FRAME_OFFSET_PAYLOAD, &slave_payload, payload_len);
     }
 
-    /* reserved[0] bit0 置有效 */
-    app_set_reserved_valid(type, frame_buf + FRAME_OFFSET_PAYLOAD);
+    /* CRC32 over [SOF + TIME + TYPE + PAYLOAD]. */
+    crc = storage_crc32(frame_buf, frame_len_without_crc);
+    memcpy(frame_buf + frame_len_without_crc, &crc, sizeof(crc));
 
-    /* CRC32: 对 [SOF + TIME + TYPE + PAYLOAD] 计算 */
-    crc = storage_crc32(frame_buf, (uint16_t)(frame_len - 4U));
-    memcpy(frame_buf + (frame_len - 4U), &crc, sizeof(crc));
-
-    *out_frame_len = frame_len;
+    *out_frame_len = frame_len_total;
     return APP_ST25DV_OK;
 }
-
 
 /* -------------------- 静态对象 -------------------- */
 
@@ -312,7 +242,7 @@ APP_ST25DV_Status_t APP_ST25DV_Init(void)
     }
 
     ST25DV_Init(&s_st25dv_obj);
-		
+		s_st25dv_obj.IsInitialized =1U;
     s_is_initialized = 1U;
 		APP_ST25DV_ConfigPollEvents();
     return APP_ST25DV_OK;
@@ -478,41 +408,48 @@ ST25DV_Object_t *APP_ST25DV_GetObject(void)
 {
     return &s_st25dv_obj;
 }
+
 uint32_t *payload_GetObject(void)
 {
-	if(BUS_MASTER_DEF)return (uint32_t *)&master_payload;
-	else return (uint32_t *)&slave_payload;
+    if (BUS_MASTER_DEF)
+    {
+        return (uint32_t *)&master_payload;
+    }
+
+    return (uint32_t *)&slave_payload;
 }
 
-
-static void save_to_flash_if_needed(uint8_t *buf, const uint8_t *eeprom_buf)
+static void sync_config_to_flash_and_eeprom(uint8_t *buf, const uint8_t *eeprom_buf)
 {
-    uint16_t frame_len;
+    uint16_t total_len;
 
     if ((buf == NULL) || (eeprom_buf == NULL))
     {
         return;
     }
 
+    total_len = APP_ST25DV_GetTotalFrameLenByType(buf[FRAME_OFFSET_TYPE]);
+    if (total_len == 0U)
+    {
+        return;
+    }
+
     if (buf != eeprom_buf)
     {
-				APP_ST25DV_WriteBytes(0,buf, FRAME_TOTAL_LEN(frame_len));
+        /* The newest valid frame came from flash. Mirror it into NFC EEPROM. */
+        (void)APP_ST25DV_WriteBytes(0U, buf, total_len);
         UART_DBG_Printf_DMA("Load from flash\r\n");
         return;
     }
 
-    frame_len = APP_ST25DV_GetFrameLenByType(buf[FRAME_OFFSET_TYPE]);
-    APP_ST25DV_SetReservedValid(buf);
-    APP_ST25DV_UpdateFrameCrc(buf);
-
-    storage_save(buf, FRAME_TOTAL_LEN(frame_len));
-		APP_ST25DV_WriteBytes(0,buf, FRAME_TOTAL_LEN(frame_len));
+    /* The newest valid frame came from NFC EEPROM. Persist it into flash. */
+    (void)storage_save(buf, total_len);
     UART_DBG_Printf_DMA("Load from eeprom\r\n");
 }
 
 APP_ST25DV_Status_t is_frame_valid(const uint8_t *frame_buf)
 {
-    uint16_t len;
+    uint16_t frame_len_without_crc;
     uint32_t stored_crc;
     uint32_t calc_crc;
     uint8_t type;
@@ -528,35 +465,25 @@ APP_ST25DV_Status_t is_frame_valid(const uint8_t *frame_buf)
     }
 
     type = frame_buf[FRAME_OFFSET_TYPE];
-    switch (type)
+    frame_len_without_crc = APP_ST25DV_GetFrameLenByType(type);
+    if (frame_len_without_crc == 0U)
     {
-        case FRAME_MASTER_TYPE:
-            len = FRAME_MASTER_LEN;
-            break;
-
-        case FRAME_SLAVE_TYPE:
-            len = FRAME_SLAVE_LEN;
-            break;
-
-        default:
-            return APP_ST25DV_ERROR;
+        return APP_ST25DV_ERROR;
     }
 
-    memcpy(&stored_crc, frame_buf + len, sizeof(stored_crc));
-    calc_crc = storage_crc32(frame_buf, len);
+    memcpy(&stored_crc, frame_buf + frame_len_without_crc, sizeof(stored_crc));
+    calc_crc = storage_crc32(frame_buf, frame_len_without_crc);
 
     if (UART_DEBUG == 1)
     {
-        UART_DBG_Printf_DMA("eeprom_crc:0x%08X crc:0x%08X\r\n", stored_crc, calc_crc);
+        UART_DBG_Printf_DMA("frame_crc:0x%08X calc:0x%08X\r\n", stored_crc, calc_crc);
     }
 
     return (stored_crc == calc_crc) ? APP_ST25DV_OK : APP_ST25DV_ERROR;
 }
 
 static APP_ST25DV_Status_t load_config_from_buffer(uint8_t *buf,
-                                                   const uint8_t *eeprom_buf,
-                                                   const uint8_t *flash_buf,
-                                                   uint8_t flash_is_valid)
+                                                   const uint8_t *eeprom_buf)
 {
     payload_check_result_t ret;
     uint8_t type;
@@ -568,14 +495,6 @@ static APP_ST25DV_Status_t load_config_from_buffer(uint8_t *buf,
 
     type = buf[FRAME_OFFSET_TYPE];
 
-    if ((buf == eeprom_buf) && (APP_ST25DV_IsReservedValid(buf) == 0U))
-    {
-			if(flash_is_valid != 0U)
-        APP_ST25DV_CopyReservedFromFrame(buf, flash_buf);
-			else
-				return APP_ST25DV_ERROR;
-    }
-
     switch (type)
     {
         case FRAME_MASTER_TYPE:
@@ -586,11 +505,11 @@ static APP_ST25DV_Status_t load_config_from_buffer(uint8_t *buf,
             ret = check_master_payload(&master_payload);
             if (ret != PAYLOAD_CHECK_OK)
             {
-                UART_DBG_Printf_DMA("payload_check code: %d\r\n", ret);
+                UART_DBG_Printf_DMA("master payload_check code: %d\r\n", ret);
                 return APP_ST25DV_ERROR;
             }
 
-            save_to_flash_if_needed(buf, eeprom_buf);
+            sync_config_to_flash_and_eeprom(buf, eeprom_buf);
             BUS_MASTER_DEF = 1;
             return APP_ST25DV_OK;
 
@@ -602,11 +521,11 @@ static APP_ST25DV_Status_t load_config_from_buffer(uint8_t *buf,
             ret = check_slave_payload(&slave_payload);
             if (ret != PAYLOAD_CHECK_OK)
             {
-                UART_DBG_Printf_DMA("payload_check code: %d\r\n", ret);
+                UART_DBG_Printf_DMA("slave payload_check code: %d\r\n", ret);
                 return APP_ST25DV_ERROR;
             }
 
-            save_to_flash_if_needed(buf, eeprom_buf);
+            sync_config_to_flash_and_eeprom(buf, eeprom_buf);
             BUS_MASTER_DEF = 0;
             return APP_ST25DV_OK;
 
@@ -618,12 +537,12 @@ static APP_ST25DV_Status_t load_config_from_buffer(uint8_t *buf,
 
 APP_ST25DV_Status_t APP_pragma_init(void)
 {
-    uint8_t flash_buffer[64] = {0};
-    uint8_t eeprom_buffer[64] = {0};
+    uint8_t flash_buffer[APP_ST25DV_FRAME_MAX_LEN] = {0};
+    uint8_t eeprom_buffer[APP_ST25DV_FRAME_MAX_LEN] = {0};
 
-    uint16_t flash_len = 0;
-    uint32_t flash_unix_time = 0;
-    uint32_t eeprom_unix_time = 0;
+    uint16_t flash_len = 0U;
+    uint32_t flash_unix_time = 0U;
+    uint32_t eeprom_unix_time = 0U;
 
     uint8_t flash_is_valid = 0U;
 
@@ -640,7 +559,17 @@ APP_ST25DV_Status_t APP_pragma_init(void)
     }
 
     flash_valid = storage_load_latest(flash_buffer, &flash_len);
-    flash_is_valid = (flash_valid == HAL_OK) ? 1U : 0U;
+    if ((flash_valid == HAL_OK) &&
+        (flash_len <= APP_ST25DV_FRAME_MAX_LEN) &&
+        (is_frame_valid(flash_buffer) == APP_ST25DV_OK))
+    {
+        flash_is_valid = 1U;
+    }
+    else
+    {
+        flash_is_valid = 0U;
+    }
+
     UART_DBG_Printf_DMA("%s\r\n", (flash_is_valid != 0U) ? "flash valid" : "flash not valid");
 
     if (APP_ST25DV_Init() != APP_ST25DV_OK)
@@ -652,7 +581,7 @@ APP_ST25DV_Status_t APP_pragma_init(void)
         UART_DBG_Printf_DMA("NFC Init\r\n");
     }
 
-    APP_ST25DV_ReadBytes(0, eeprom_buffer, sizeof(eeprom_buffer));
+    (void)APP_ST25DV_ReadBytes(0U, eeprom_buffer, sizeof(eeprom_buffer));
     eeprom_valid = is_frame_valid(eeprom_buffer);
     UART_DBG_Printf_DMA("%s\r\n", (eeprom_valid == APP_ST25DV_OK) ? "eeprom valid" : "eeprom not valid");
 
@@ -663,24 +592,24 @@ APP_ST25DV_Status_t APP_pragma_init(void)
 
         if (eeprom_unix_time > flash_unix_time)
         {
-            if (load_config_from_buffer(eeprom_buffer, eeprom_buffer, flash_buffer, flash_is_valid) != APP_ST25DV_OK)
+            if (load_config_from_buffer(eeprom_buffer, eeprom_buffer) != APP_ST25DV_OK)
             {
-                return load_config_from_buffer(flash_buffer, eeprom_buffer, flash_buffer, flash_is_valid);
+                return load_config_from_buffer(flash_buffer, eeprom_buffer);
             }
             return APP_ST25DV_OK;
         }
 
-        return load_config_from_buffer(flash_buffer, eeprom_buffer, flash_buffer, flash_is_valid);
+        return load_config_from_buffer(flash_buffer, eeprom_buffer);
     }
 
     if (eeprom_valid == APP_ST25DV_OK)
     {
-        return load_config_from_buffer(eeprom_buffer, eeprom_buffer, flash_buffer, flash_is_valid);
+        return load_config_from_buffer(eeprom_buffer, eeprom_buffer);
     }
 
     if (flash_is_valid != 0U)
     {
-        return load_config_from_buffer(flash_buffer, eeprom_buffer, flash_buffer, flash_is_valid);
+        return load_config_from_buffer(flash_buffer, eeprom_buffer);
     }
 
     return APP_ST25DV_ERROR;
@@ -693,25 +622,21 @@ static payload_check_result_t check_rf_param(const rf_param_t *rf)
         return PAYLOAD_CHECK_ERR_NULL;
     }
 
-    /* 功率范围 */
     if ((rf->pwr < RF_MIN_RAMP) || (rf->pwr > RF_MAX_RAMP))
     {
         return PAYLOAD_CHECK_ERR_RF_PWR;
     }
 
-    /* 频率范围：405MHz ~ 1080MHz */
     if ((rf->freq < RF_FREQ_MIN_HZ) || (rf->freq > RF_FREQ_MAX_HZ))
     {
         return PAYLOAD_CHECK_ERR_RF_FREQ;
     }
 
-    /* SF */
     if ((rf->sf < SF_5) || (rf->sf > SF_12))
     {
         return PAYLOAD_CHECK_ERR_RF_SF;
     }
 
-    /* BW */
     if ((rf->bw != BW_62_5K) &&
         (rf->bw != BW_125K)  &&
         (rf->bw != BW_250K)  &&
@@ -720,13 +645,32 @@ static payload_check_result_t check_rf_param(const rf_param_t *rf)
         return PAYLOAD_CHECK_ERR_RF_BW;
     }
 
-    /* CR */
     if ((rf->cr != CODE_RATE_45) &&
         (rf->cr != CODE_RATE_46) &&
         (rf->cr != CODE_RATE_47) &&
         (rf->cr != CODE_RATE_48))
     {
         return PAYLOAD_CHECK_ERR_RF_CR;
+    }
+
+    return PAYLOAD_CHECK_OK;
+}
+
+static payload_check_result_t check_rs485_port_config(const rs485_port_config_t *port)
+{
+    if (port == NULL)
+    {
+        return PAYLOAD_CHECK_ERR_NULL;
+    }
+
+    if (port->baudrate_index > UART_BAUDRATE_INDEX_MAX)
+    {
+        return PAYLOAD_CHECK_ERR_RS485_BAUD;
+    }
+
+    if ((port->feature_flags & (uint8_t)(~RS485_FEATURE_VALID_MASK)) != 0U)
+    {
+        return PAYLOAD_CHECK_ERR_RS485_FEATURE;
     }
 
     return PAYLOAD_CHECK_OK;
@@ -741,74 +685,51 @@ payload_check_result_t check_master_payload(const master_payload_t *master)
         return PAYLOAD_CHECK_ERR_NULL;
     }
 
-    /* 先校验 RF */
-    ret = check_rf_param(&master->rf_param);
+    ret = check_rf_param(&master->rf);
     if (ret != PAYLOAD_CHECK_OK)
     {
         return ret;
     }
 
-    /* vehicle_id */
     if ((master->vehicle_id < VEHICLE_ID_MIN) ||
         (master->vehicle_id > VEHICLE_ID_MAX))
     {
         return PAYLOAD_CHECK_ERR_VEHICLE_ID;
     }
 
-    /* 轮询从机范围 */
-    if (master->poll_start_slave >= BUS_MASTER_MAX_SLAVES)
+    ret = check_rs485_port_config(&master->rs485_1);
+    if (ret != PAYLOAD_CHECK_OK)
     {
-        return PAYLOAD_CHECK_ERR_POLL_START_SEAT;
+        return ret;
     }
 
-    if (master->poll_end_slave >= BUS_MASTER_MAX_SLAVES)
+    ret = check_rs485_port_config(&master->rs485_2);
+    if (ret != PAYLOAD_CHECK_OK)
     {
-        return PAYLOAD_CHECK_ERR_POLL_END_SEAT;
+        return ret;
     }
 
-    if (master->poll_start_slave > master->poll_end_slave)
+    return PAYLOAD_CHECK_OK;
+}
+
+static payload_check_result_t check_seat_port_config(const seat_port_config_t *seat)
+{
+    if (seat == NULL)
     {
-        return PAYLOAD_CHECK_ERR_POLL_RANGE;
+        return PAYLOAD_CHECK_ERR_NULL;
     }
 
-    /* max_retry */
-    if ((master->max_retry < MASTER_MAX_RETRY_MIN) ||
-        (master->max_retry > MASTER_MAX_RETRY_MAX))
+    if ((seat->enable != SEAT_ENABLE_FALSE) && (seat->enable != SEAT_ENABLE_TRUE))
     {
-        return PAYLOAD_CHECK_ERR_MAX_RETRY;
+        return PAYLOAD_CHECK_ERR_SEAT_ENABLE;
     }
 
-    /* 超时 */
-    if ((master->reply_timeout_ms < MASTER_REPLY_TIMEOUT_MS_MIN) ||
-        (master->reply_timeout_ms > MASTER_REPLY_TIMEOUT_MS_MAX))
+    if (seat->enable == SEAT_ENABLE_TRUE)
     {
-        return PAYLOAD_CHECK_ERR_REPLY_TIMEOUT;
-    }
-
-    if ((master->inter_query_gap_ms < MASTER_INTER_QUERY_GAP_MS_MIN) ||
-        (master->inter_query_gap_ms > MASTER_INTER_QUERY_GAP_MS_MAX))
-    {
-        return PAYLOAD_CHECK_ERR_INTER_QUERY_GAP;
-    }
-
-    /* 竞争窗口 */
-    if ((master->contend_M < MASTER_CONTEND_M_MIN) ||
-        (master->contend_M > MASTER_CONTEND_M_MAX))
-    {
-        return PAYLOAD_CHECK_ERR_CONTEND_M;
-    }
-
-    /* 时间参数 */
-    if ((master->cad_idle_ms < MASTER_CAD_IDLE_MS_MIN) ||
-        (master->cad_idle_ms > MASTER_CAD_IDLE_MS_MAX))
-    {
-        return PAYLOAD_CHECK_ERR_CAD_IDLE_MS;
-    }
-
-    if ((master->round_sleep_ms < MASTER_ROUND_SLEEP_MS_MIN) ||
-        (master->round_sleep_ms > MASTER_ROUND_SLEEP_MS_MAX))
-    {
-        return PAYLOAD_CHECK_ERR_ROUND_SLEEP_MS;
+        if ((seat->seat_no < SEAT_NO_MIN) || (seat->seat_no > SEAT_NO_MAX))
+        {
+            return PAYLOAD_CHECK_ERR_SEAT_NO;
+        }
     }
 
     return PAYLOAD_CHECK_OK;
@@ -823,31 +744,82 @@ payload_check_result_t check_slave_payload(const slave_payload_t *slave)
         return PAYLOAD_CHECK_ERR_NULL;
     }
 
-    /* 先校验 RF */
-    ret = check_rf_param(&slave->rf_param);
+    ret = check_rf_param(&slave->rf);
     if (ret != PAYLOAD_CHECK_OK)
     {
         return ret;
     }
 
-    /* vehicle_id */
     if ((slave->vehicle_id < VEHICLE_ID_MIN) ||
         (slave->vehicle_id > VEHICLE_ID_MAX))
     {
         return PAYLOAD_CHECK_ERR_VEHICLE_ID;
     }
 
-    /* seat_id / slave_id 范围 */
-    if (slave->seat_id >= BUS_MASTER_MAX_SLAVES)
+    ret = check_seat_port_config(&slave->seat[0]);
+    if (ret != PAYLOAD_CHECK_OK)
     {
-        return PAYLOAD_CHECK_ERR_SEAT_ID;
+        return ret;
+    }
+
+    ret = check_seat_port_config(&slave->seat[1]);
+    if (ret != PAYLOAD_CHECK_OK)
+    {
+        return ret;
+    }
+
+    if ((slave->seat[0].enable == SEAT_ENABLE_TRUE) &&
+        (slave->seat[1].enable == SEAT_ENABLE_TRUE) &&
+        (slave->seat[0].seat_no == slave->seat[1].seat_no))
+    {
+        return PAYLOAD_CHECK_ERR_SEAT_DUPLICATE;
+    }
+
+    if (((uint16_t)slave->seat_behavior.abnormal_order_mask & (uint16_t)(~ORDER_STATE_MASK_VALID)) != 0U)
+    {
+        return PAYLOAD_CHECK_ERR_ORDER_MASK;
+    }
+
+    if (((uint16_t)slave->seat_behavior.filter_order_mask & (uint16_t)(~ORDER_STATE_MASK_VALID)) != 0U)
+    {
+        return PAYLOAD_CHECK_ERR_ORDER_MASK;
+    }
+
+    if (slave->seat_behavior.filter_time_s > FILTER_TIME_S_MAX)
+    {
+        return PAYLOAD_CHECK_ERR_FILTER_TIME;
+    }
+
+    if ((slave->contend.slot_ms < SLAVE_SLOT_MS_MIN) ||
+        (slave->contend.slot_ms > SLAVE_SLOT_MS_MAX))
+    {
+        return PAYLOAD_CHECK_ERR_SLOT_MS;
+    }
+
+    if ((slave->contend.contend_slot_count_n < SLAVE_CONTEND_N_MIN) ||
+        (slave->contend.contend_slot_count_n > SLAVE_CONTEND_N_MAX))
+    {
+        return PAYLOAD_CHECK_ERR_CONTEND_N;
+    }
+
+    if ((slave->contend.idle_confirm_ms < SLAVE_IDLE_CONFIRM_MS_MIN) ||
+        (slave->contend.idle_confirm_ms > SLAVE_IDLE_CONFIRM_MS_MAX))
+    {
+        return PAYLOAD_CHECK_ERR_IDLE_CONFIRM_MS;
+    }
+
+    if ((slave->contend.ack_timeout_ms < SLAVE_ACK_TIMEOUT_MS_MIN) ||
+        (slave->contend.ack_timeout_ms > SLAVE_ACK_TIMEOUT_MS_MAX))
+    {
+        return PAYLOAD_CHECK_ERR_ACK_TIMEOUT_MS;
     }
 
     return PAYLOAD_CHECK_OK;
 }
+
 APP_ST25DV_Status_t APP_ST25DV_SaveCurrentPayload(uint32_t unix_time)
 {
-    uint8_t frame_buf[64] = {0};
+    uint8_t frame_buf[APP_ST25DV_FRAME_MAX_LEN] = {0};
     uint16_t frame_len = 0U;
 
     if (app_build_frame_from_current_payload(unix_time,
@@ -859,14 +831,12 @@ APP_ST25DV_Status_t APP_ST25DV_SaveCurrentPayload(uint32_t unix_time)
         return APP_ST25DV_ERROR;
     }
 
-    /* 先写 flash */
     if (storage_save(frame_buf, frame_len) != HAL_OK)
     {
         UART2_Printf_DMA("storage_save failed\r\n");
         return APP_ST25DV_ERROR;
     }
 
-    /* 再写 EEPROM */
     if (APP_ST25DV_WriteBytes(0U, frame_buf, frame_len) != APP_ST25DV_OK)
     {
         UART2_Printf_DMA("APP_ST25DV_WriteBytes failed\r\n");
@@ -878,8 +848,10 @@ APP_ST25DV_Status_t APP_ST25DV_SaveCurrentPayload(uint32_t unix_time)
 
 void nfc_task_in_tim(void)
 {
-    uint8_t it_status = 0;
+    uint8_t it_status = 0U;
     ST25DV_Object_t *pObj = APP_ST25DV_GetObject();
+    uint8_t eeprom_buffer[APP_ST25DV_FRAME_MAX_LEN] = {0};
+    APP_ST25DV_Status_t eeprom_valid;
 
     if (pObj == NULL)
     {
@@ -891,22 +863,23 @@ void nfc_task_in_tim(void)
         return;
     }
 
-    if (it_status == 0)
+    if (it_status == 0U)
     {
         return;
     }
-		uint8_t eeprom_buffer[64];
-		APP_ST25DV_ReadBytes(0,eeprom_buffer,sizeof(eeprom_buffer));
-		APP_ST25DV_Status_t eeprom_valid;
-		eeprom_valid = is_frame_valid(eeprom_buffer);
-		if(eeprom_valid == APP_ST25DV_OK)
-		{
-			NVIC_SystemReset();
-		}
-}
-	
 
-/* 测试函数 */
+    if (APP_ST25DV_ReadBytes(0U, eeprom_buffer, sizeof(eeprom_buffer)) != APP_ST25DV_OK)
+    {
+        return;
+    }
+
+    eeprom_valid = is_frame_valid(eeprom_buffer);
+    if (eeprom_valid == APP_ST25DV_OK)
+    {
+        NVIC_SystemReset();
+    }
+}
+
 void APP_ST25DV_RunTest(void)
 {
     uint8_t id = 0;
