@@ -63,6 +63,9 @@ typedef struct
 void SeatBeltMonitor_Init(void);
 void SeatBeltMonitor_Task10Hz(void);
 
+/* Queue a snapshot of every enabled seat for periodic synchronization. */
+uint8_t SeatBeltMonitor_TriggerReport(void);
+
 /*
  * Latest-only report mailbox:
  * - A confirmed transition on either seat overwrites the previous unsent report.

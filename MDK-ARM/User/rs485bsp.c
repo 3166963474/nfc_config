@@ -452,22 +452,28 @@ HAL_StatusTypeDef RS485BSP_SendSeatReport(const rs485_seat_report_item_t *seats,
     uint8_t frame[RS485_REPORT_MAX_FRAME_LEN];
     uint16_t len;
     uint8_t i;
+    uint8_t vehicle_id;
+    master_payload_t *master_cfg;
 
     if ((seats == NULL) || (seat_count == 0u) || (seat_count > RS485_REPORT_MAX_SEATS))
     {
         return HAL_ERROR;
     }
 
+    master_cfg = (master_payload_t *)payload_GetObject();
+    vehicle_id = master_cfg->vehicle_id;
+
     frame[0] = RS485_REPORT_FRAME_HEAD;
-    frame[1] = seat_count;
+    frame[1] = vehicle_id;
+    frame[2] = seat_count;
 
     for (i = 0u; i < seat_count; i++)
     {
-        frame[2u + ((uint16_t)i * 2u)] = seats[i].seat_no;
-        frame[3u + ((uint16_t)i * 2u)] = seats[i].order_state;
+        frame[3u + ((uint16_t)i * 2u)] = seats[i].seat_no;
+        frame[4u + ((uint16_t)i * 2u)] = seats[i].order_state;
     }
 
-    len = (uint16_t)(2u + ((uint16_t)seat_count * 2u));
+    len = (uint16_t)(3u + ((uint16_t)seat_count * 2u));
     frame[len] = rs485_sum8(frame, len);
     len++;
 

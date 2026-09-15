@@ -27,6 +27,16 @@ extern "C" {
 #define RESERVED_OFFSET_IN_PAYLOAD   8U
 #define RESERVED_OFFSET_IN_FRAME     ((uint16_t)(FRAME_OFFSET_PAYLOAD + RESERVED_OFFSET_IN_PAYLOAD))
 
+/* slave_payload.reserved[0] hardware configuration flags. */
+#define SLAVE_RESERVED_OCCUPIED_ACTIVE_HIGH  0x01U
+#define SLAVE_RESERVED_BELT_CLOSED_ACTIVE_LOW 0x02U
+#define SLAVE_RESERVED_PASSIVE_BUZZER         0x04U
+
+/* slave_payload.reserved[] periodic-report configuration.
+ * reserved[1] is in 8-second units; reserved[2] is in seconds. */
+#define SLAVE_RESERVED_PERIODIC_INTERVAL_INDEX    1U
+#define SLAVE_RESERVED_PERIODIC_RANDOM_DELAY_INDEX 2U
+
 /* Current frame_builder_v2 payload sizes. */
 #define FRAME_MASTER_PAYLOAD_LEN     29U
 #define FRAME_SLAVE_PAYLOAD_LEN      42U

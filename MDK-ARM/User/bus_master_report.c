@@ -52,13 +52,14 @@ static uint8_t bus_master_report_order_state_valid(uint8_t seat_no, uint8_t orde
     return (order_state <= BUS_MASTER_REPORT_ORDER_STATE_MAX) ? 1U : 0U;
 }
 
-static uint8_t bus_master_report_parse(const uint8_t *buf,
+static uint8_t bus_master_report_parse(const bus_master_report_t *master,
+                                       const uint8_t *buf,
                                        uint16_t len,
                                        bus_master_slave_report_t *out)
 {
     uint8_t has_seat;
 
-    if ((buf == NULL) || (out == NULL))
+    if ((master == NULL) || (buf == NULL) || (out == NULL))
     {
         return 0U;
     }
@@ -68,11 +69,17 @@ static uint8_t bus_master_report_parse(const uint8_t *buf,
         return 0U;
     }
 
-    out->seq = (uint16_t)buf[0] | ((uint16_t)buf[1] << 8);
-    out->seat0_no = buf[2];
-    out->seat0_order_state = buf[3];
-    out->seat1_no = buf[4];
-    out->seat1_order_state = buf[5];
+    out->vehicle_id = buf[0];
+    out->seq = (uint16_t)buf[1] | ((uint16_t)buf[2] << 8);
+    out->seat0_no = buf[3];
+    out->seat0_order_state = buf[4];
+    out->seat1_no = buf[5];
+    out->seat1_order_state = buf[6];
+
+    if (out->vehicle_id != master->vehicle_id)
+    {
+        return 0U;
+    }
 
     if (bus_master_report_order_state_valid(out->seat0_no, out->seat0_order_state) == 0U)
     {
@@ -101,11 +108,12 @@ static uint8_t bus_master_report_is_same(const bus_master_slave_report_t *a,
         return 0U;
     }
 
-    return ((a->seq == b->seq) &&
-            (a->seat0_no == b->seat0_no) &&
-            (a->seat0_order_state == b->seat0_order_state) &&
-            (a->seat1_no == b->seat1_no) &&
-            (a->seat1_order_state == b->seat1_order_state)) ? 1U : 0U;
+		return ((a->vehicle_id == b->vehicle_id) &&
+						(a->seq == b->seq) &&
+						(a->seat0_no == b->seat0_no) &&
+						(a->seat0_order_state == b->seat0_order_state) &&
+						(a->seat1_no == b->seat1_no) &&
+						(a->seat1_order_state == b->seat1_order_state)) ? 1U : 0U;
 }
 
 static uint8_t bus_master_report_is_duplicate(const bus_master_report_t *master,
@@ -135,12 +143,16 @@ static uint8_t bus_master_report_is_duplicate(const bus_master_report_t *master,
     return 1U;
 }
 
-static void bus_master_report_send_ack(bus_master_report_t *master, uint16_t seq, uint32_t now_ms)
+static void bus_master_report_send_ack(bus_master_report_t *master,
+                                       uint8_t vehicle_id,
+                                       uint16_t seq,
+                                       uint32_t now_ms)
 {
     uint8_t ack[BUS_MASTER_REPORT_ACK_FRAME_LEN];
 
-    ack[0] = (uint8_t)(seq & 0xFFU);
-    ack[1] = (uint8_t)((seq >> 8) & 0xFFU);
+    ack[0] = vehicle_id;
+    ack[1] = (uint8_t)(seq & 0xFFU);
+    ack[2] = (uint8_t)((seq >> 8) & 0xFFU);
 
     rf_set_mode(RF_MODE_STB3);
     rf_enter_continous_tx();
@@ -150,7 +162,7 @@ static void bus_master_report_send_ack(bus_master_report_t *master, uint16_t seq
     master->last_ack_tx_start_tick = now_ms;
     bus_master_report_set_state(master, BUS_MASTER_REPORT_WAIT_ACK_TX_DONE, now_ms);
 
-    BMR_LOG("BMR ack tx: seq=%u\r\n", seq);
+    BMR_LOG("BMR ack tx: vehicle=%u seq=%u\r\n", vehicle_id, seq);
 }
 
 static void bus_master_report_forward_to_rs485(bus_master_report_t *master,
@@ -223,8 +235,7 @@ void bus_master_report_on_rx_done(bus_master_report_t *master, uint32_t now_ms)
         return;
     }
     rf_set_recv_flag(RADIO_FLAG_IDLE);
-    ok = bus_master_report_parse(RxDoneParams.Payload, RxDoneParams.Size, &report);
-    RxDoneParams.Size = 0U;
+		ok = bus_master_report_parse(master, RxDoneParams.Payload, RxDoneParams.Size, &report);    RxDoneParams.Size = 0U;
 
     if (ok == 0U)
     {
@@ -238,7 +249,8 @@ void bus_master_report_on_rx_done(bus_master_report_t *master, uint32_t now_ms)
     master->current_report = report;
 		uint8_t awdawf[16];
 		float_to_str_2(awdawf,16,RxDoneParams.Snr);
-    BMR_LOG("BMR rx ok: seq=%u s0=%u/%u s1=%u/%u rssi=%d snr= %s\r\n",
+    BMR_LOG("BMR rx ok: vehicle=%u seq=%u s0=%u/%u s1=%u/%u rssi=%d snr= %s\r\n",
+						report.vehicle_id,
             report.seq,
             report.seat0_no,
             report.seat0_order_state,
@@ -263,7 +275,7 @@ void bus_master_report_on_rx_done(bus_master_report_t *master, uint32_t now_ms)
     }
 
     /* ACK must be sent even for duplicate reports, otherwise the slave will keep retrying. */
-    bus_master_report_send_ack(master, report.seq, now_ms);
+		bus_master_report_send_ack(master, report.vehicle_id, report.seq, now_ms);
 }
 
 void bus_master_report_on_tx_done(bus_master_report_t *master, uint32_t now_ms)

@@ -60,7 +60,7 @@ void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(GPIOA, DE_485_Pin|DE_485_2_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, BUZZER_Pin|LED_G_Pin|LED_R_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, LED_G_Pin|LED_R_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin : E290_IRQ_Pin */
   GPIO_InitStruct.Pin = E290_IRQ_Pin;
@@ -75,24 +75,18 @@ void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
   HAL_GPIO_Init(SPI_CS_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : E290_RF_SET_Pin BUZZER_Pin */
-  GPIO_InitStruct.Pin = E290_RF_SET_Pin|BUZZER_Pin;
+  /*Configure GPIO pin : E290_RF_SET_Pin */
+  GPIO_InitStruct.Pin = E290_RF_SET_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+  HAL_GPIO_Init(E290_RF_SET_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pin : E290_GPIO11_Pin */
   GPIO_InitStruct.Pin = E290_GPIO11_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(E290_GPIO11_GPIO_Port, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : GPO_Pin */
-  GPIO_InitStruct.Pin = GPO_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
-  GPIO_InitStruct.Pull = GPIO_PULLUP;
-  HAL_GPIO_Init(GPO_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pins : Senser_3_Pin Senser_4_Pin Senser_1_Pin Senser_2_Pin */
   GPIO_InitStruct.Pin = Senser_3_Pin|Senser_4_Pin|Senser_1_Pin|Senser_2_Pin;
@@ -113,10 +107,6 @@ void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-
-  /* EXTI interrupt init*/
-  HAL_NVIC_SetPriority(EXTI2_IRQn, 6, 0);
-  HAL_NVIC_EnableIRQ(EXTI2_IRQn);
 
 }
 

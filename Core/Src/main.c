@@ -24,6 +24,7 @@
 #include "spi.h"
 #include "tim.h"
 #include "usart.h"
+#include "usb_device.h"
 #include "gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
@@ -39,6 +40,7 @@
 #include "app_st25dv.h"
 #include "buzzer_led_drv.h"
 #include "seat_belt_monitor.h"
+#include "bus_rand.h"
 
 /* USER CODE END Includes */
 
@@ -116,6 +118,8 @@ int main(void)
   MX_ADC1_Init();
   MX_CRC_Init();
   MX_USART2_UART_Init();
+  MX_USB_DEVICE_Init();
+  MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
 	HAL_TIM_Base_Start(&htim2);
 	
@@ -129,14 +133,24 @@ int main(void)
 	
 	if(APP_pragma_init() != APP_ST25DV_OK)
 	{
-		HAL_TIM_Base_Start_IT(&htim4);
+		HAL_TIM_Base_Start_IT(&htim3);
 		UART_DBG_Printf_DMA("No valid config!!!\r\n");
-		BuzzerLed_SetMode(BUZZER_LED_DEV_LED_G,BUZZER_LED_MODE_SLOW_BLINK);
+		BuzzerLed_SetMode(BUZZER_LED_DEV_BUZZER,BUZZER_LED_MODE_SLOW_BLINK);
 		while(1);
 	}
 	else UART_DBG_Printf_DMA("Config loaded\r\n");
+	if (BUS_MASTER_DEF != 0U)
+	{
+		BuzzerLed_SetPassiveBuzzer((master_payload.reserved[0] &
+								SLAVE_RESERVED_PASSIVE_BUZZER) != 0U);
+	}
+	else
+	{
+		BuzzerLed_SetPassiveBuzzer((slave_payload.reserved[0] &
+								SLAVE_RESERVED_PASSIVE_BUZZER) != 0U);
+	}
 	RS485BSP_Init();
-	HAL_TIM_Base_Start_IT(&htim4);
+	HAL_TIM_Base_Start_IT(&htim3);
 	
 	if(rf_init() != OK)
 	{
@@ -150,7 +164,9 @@ int main(void)
 	
 	rf_cad_on(0x03,0x0e,0x02,0x00);
 	rf_set_default_para();
-		
+	
+	HAL_Delay(10000 + 10*bus_rand_slot(50));
+	
 	if(BUS_MASTER_DEF)
 	{
     bus_master_report_init(get_master_report_obj());
@@ -226,8 +242,9 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
-  PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_ADC;
+  PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_ADC|RCC_PERIPHCLK_USB;
   PeriphClkInit.AdcClockSelection = RCC_ADCPCLK2_DIV6;
+  PeriphClkInit.UsbClockSelection = RCC_USBCLKSOURCE_PLL;
   if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
   {
     Error_Handler();
@@ -237,16 +254,12 @@ void SystemClock_Config(void)
 /* USER CODE BEGIN 4 */
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
-	nfc_task_in_tim();
-	BuzzerLed_Tick10Hz();
-	SeatBeltMonitor_Task10Hz();
-}
-void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
-{
-    if (GPIO_Pin == GPO_Pin)
-    {
-			
-    }
+	if (htim->Instance == TIM3)
+	{
+		nfc_task_in_tim();
+		BuzzerLed_Tick10Hz();
+		SeatBeltMonitor_Task10Hz();
+	}
 }
 
 /* USER CODE END 4 */

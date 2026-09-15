@@ -2386,7 +2386,7 @@ RF_Err_t rf_enter_continous_tx(void)
  */
 RF_Err_t rf_continous_tx_send_data(uint8_t *buf, uint8_t size)
 {
-//    RF_ASSERT(rf_set_ldo_pa_on());
+    RF_ASSERT(rf_set_ldo_pa_on());
 
     rf_port.set_tx();//发送端口
 

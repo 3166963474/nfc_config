@@ -1,4 +1,5 @@
 #include "main.h"
+#include "tim.h"
 #include <stdint.h>
 #include "buzzer_led_drv.h"
 /*
@@ -49,6 +50,15 @@ typedef struct
 #define BUZZER_LED_SLOW_TOGGLE_TICKS   5u
 #define BUZZER_LED_FAST_TOGGLE_TICKS   1u
 
+#define BUZZER_GPIO_Port GPIOB
+#define BUZZER_Pin GPIO_PIN_7
+
+#define BUZZER_PWM_TIMER       htim4
+#define BUZZER_PWM_CHANNEL     TIM_CHANNEL_2
+
+static uint8_t s_buzzer_is_passive = 0u;
+static uint8_t s_buzzer_pwm_running = 0u;
+
 static buzzer_led_ctrl_t s_buzzer_led_list[BUZZER_LED_DEV_MAX] =
 {
     [BUZZER_LED_DEV_BUZZER] = {
@@ -77,6 +87,25 @@ static buzzer_led_ctrl_t s_buzzer_led_list[BUZZER_LED_DEV_MAX] =
     }
 };
 
+static void BuzzerLed_ConfigureBuzzerPin(uint8_t passive)
+{
+    GPIO_InitTypeDef gpio = {0};
+
+    (void)HAL_TIM_PWM_Stop(&BUZZER_PWM_TIMER, BUZZER_PWM_CHANNEL);
+    s_buzzer_pwm_running = 0u;
+    __HAL_RCC_GPIOB_CLK_ENABLE();
+
+    gpio.Pin = BUZZER_Pin;
+    gpio.Speed = GPIO_SPEED_FREQ_LOW;
+    gpio.Mode = (passive != 0u) ? GPIO_MODE_AF_PP : GPIO_MODE_OUTPUT_PP;
+    HAL_GPIO_Init(BUZZER_GPIO_Port, &gpio);
+
+    if (passive == 0u)
+    {
+        HAL_GPIO_WritePin(BUZZER_GPIO_Port, BUZZER_Pin, GPIO_PIN_RESET);
+    }
+}
+
 static void BuzzerLed_WriteRaw(const buzzer_led_ctrl_t *dev, uint8_t on)
 {
     GPIO_PinState pin_state;
@@ -84,6 +113,32 @@ static void BuzzerLed_WriteRaw(const buzzer_led_ctrl_t *dev, uint8_t on)
     if (dev == 0)
     {
         return;
+    }
+
+    if (dev == &s_buzzer_led_list[BUZZER_LED_DEV_BUZZER])
+    {
+        if (s_buzzer_is_passive != 0u)
+        {
+            if (on != 0u)
+            {
+                if (s_buzzer_pwm_running == 0u)
+                {
+                    if (HAL_TIM_PWM_Start(&BUZZER_PWM_TIMER, BUZZER_PWM_CHANNEL) == HAL_OK)
+                    {
+                        s_buzzer_pwm_running = 1u;
+                    }
+                }
+            }
+            else
+            {
+                if (s_buzzer_pwm_running != 0u)
+                {
+                    (void)HAL_TIM_PWM_Stop(&BUZZER_PWM_TIMER, BUZZER_PWM_CHANNEL);
+                    s_buzzer_pwm_running = 0u;
+                }
+            }
+            return;
+        }
     }
 
     if (dev->active_level == BUZZER_LED_ACTIVE_HIGH)
@@ -176,6 +231,9 @@ void BuzzerLed_Init(void)
 {
     uint8_t i;
 
+    s_buzzer_is_passive = 0u;
+    BuzzerLed_ConfigureBuzzerPin(0u);
+
     for (i = 0u; i < (uint8_t)BUZZER_LED_DEV_MAX; i++)
     {
         s_buzzer_led_list[i].mode = BUZZER_LED_MODE_OFF;
@@ -183,6 +241,21 @@ void BuzzerLed_Init(void)
         s_buzzer_led_list[i].tick_div_cnt = 0u;
         BuzzerLed_WriteRaw(&s_buzzer_led_list[i], 0u);
     }
+}
+
+void BuzzerLed_SetPassiveBuzzer(uint8_t enable)
+{
+    uint8_t passive = (enable != 0u) ? 1u : 0u;
+
+    if (passive == s_buzzer_is_passive)
+    {
+        return;
+    }
+
+    BuzzerLed_ConfigureBuzzerPin(passive);
+    s_buzzer_is_passive = passive;
+    BuzzerLed_WriteRaw(&s_buzzer_led_list[BUZZER_LED_DEV_BUZZER],
+                       s_buzzer_led_list[BUZZER_LED_DEV_BUZZER].output_on);
 }
 
 void BuzzerLed_SetMode(buzzer_led_dev_t dev, buzzer_led_mode_t mode)

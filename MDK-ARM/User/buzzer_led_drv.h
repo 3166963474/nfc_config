@@ -26,6 +26,13 @@ typedef enum
 /* 初始化 */
 void BuzzerLed_Init(void);
 
+/*
+ * Select the buzzer hardware connected to PB7:
+ * 0: active buzzer, driven as a high-level GPIO output;
+ * 1: passive buzzer, driven by TIM4 CH2 PWM.
+ */
+void BuzzerLed_SetPassiveBuzzer(uint8_t enable);
+
 /* 设置模式 */
 void BuzzerLed_SetMode(buzzer_led_dev_t dev, buzzer_led_mode_t mode);
 

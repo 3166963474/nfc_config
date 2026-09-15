@@ -12,20 +12,20 @@ extern "C" {
 #include "seat_belt_monitor.h"
 
 /*
- * Uplink payload, no extra head/checksum by design:
- * byte0~1 : seq, little-endian
- * byte2   : seat0 seat_no, 0 if disabled
- * byte3   : seat0 order_state, 0 if disabled / no confirmed transition
- * byte4   : seat1 seat_no, 0 if disabled
- * byte5   : seat1 order_state, 0 if disabled / no confirmed transition
+ * Uplink payload:
+ * byte0   : vehicle_id
+ * byte1~2 : seq, little-endian
+ * byte3   : seat0 seat_no
+ * byte4   : seat0 order_state
+ * byte5   : seat1 seat_no
+ * byte6   : seat1 order_state
+ *
+ * ACK payload:
+ * byte0   : vehicle_id
+ * byte1~2 : seq, little-endian
  */
-#define BUS_SLAVE_REPORT_TX_FRAME_LEN   6U
-
-/*
- * ACK payload expected from master, no extra head/checksum:
- * byte0~1 : seq, little-endian, echoing the uplink seq.
- */
-#define BUS_SLAVE_REPORT_ACK_FRAME_LEN  2U
+#define BUS_SLAVE_REPORT_TX_FRAME_LEN   7U
+#define BUS_SLAVE_REPORT_ACK_FRAME_LEN  3U
 
 #define BUS_SLAVE_REPORT_DEFAULT_SLOT_MS          5U
 #define BUS_SLAVE_REPORT_DEFAULT_CONTEND_N        50U
@@ -34,6 +34,10 @@ extern "C" {
 #define BUS_SLAVE_REPORT_DEFAULT_MAX_RETRY        255U
 
 #define BUS_SLAVE_REPORT_TX_DONE_TIMEOUT_MS       500U
+
+/* reserved[1] periodic-report base timing unit; reserved[2] is in seconds. */
+#define BUS_SLAVE_REPORT_PERIODIC_UNIT_MS          8000UL
+#define BUS_SLAVE_REPORT_RANDOM_DELAY_UNIT_MS      1000UL
 
 /* 255 means retry forever. Other values are retry count after the first failed send. */
 #define BUS_SLAVE_REPORT_MAX_RETRY_FOREVER        255U
@@ -58,6 +62,10 @@ typedef struct
     uint16_t ack_timeout_ms;
     uint8_t  max_retry;
 
+    /* reserved[1]: base interval in 8-second units; reserved[2]: random extra seconds. */
+    uint8_t periodic_base_interval_units;
+    uint8_t periodic_random_delay_units;
+
     bus_slave_report_state_t state;
     uint32_t state_tick;
 
@@ -70,6 +78,9 @@ typedef struct
     uint8_t current_valid;
     seat_belt_report_event_t current_event;
 
+    uint8_t periodic_report_scheduled;
+    uint32_t next_periodic_report_tick;
+
     uint32_t tx_count;
     uint32_t ack_ok_count;
     uint32_t ack_timeout_count;
@@ -79,6 +90,7 @@ typedef struct
     uint32_t drop_old_count;
     uint32_t pending_replace_count;
     uint32_t drop_after_retry_limit_count;
+    uint32_t periodic_report_count;
 } bus_slave_report_t;
 
 void bus_slave_report_init(bus_slave_report_t *report);

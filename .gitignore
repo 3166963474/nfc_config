@@ -1,0 +1,8 @@
+# Keil MDK-ARM build output and per-user workspace settings
+MDK-ARM/BUS_SEAT_V0_0_3/
+MDK-ARM/*.uvguix.*
+MDK-ARM/*.uvoptx
+
+# Temporary working files
+tmp/
+tools/.venv/

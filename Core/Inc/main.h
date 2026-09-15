@@ -66,9 +66,6 @@ void Error_Handler(void);
 #define E290_RF_SET_GPIO_Port GPIOB
 #define E290_GPIO11_Pin GPIO_PIN_1
 #define E290_GPIO11_GPIO_Port GPIOB
-#define GPO_Pin GPIO_PIN_2
-#define GPO_GPIO_Port GPIOB
-#define GPO_EXTI_IRQn EXTI2_IRQn
 #define Senser_3_Pin GPIO_PIN_14
 #define Senser_3_GPIO_Port GPIOB
 #define Senser_4_Pin GPIO_PIN_15
@@ -81,8 +78,6 @@ void Error_Handler(void);
 #define Senser_1_GPIO_Port GPIOB
 #define Senser_2_Pin GPIO_PIN_6
 #define Senser_2_GPIO_Port GPIOB
-#define BUZZER_Pin GPIO_PIN_7
-#define BUZZER_GPIO_Port GPIOB
 #define LED_G_Pin GPIO_PIN_8
 #define LED_G_GPIO_Port GPIOB
 #define LED_R_Pin GPIO_PIN_9

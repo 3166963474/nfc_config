@@ -31,7 +31,7 @@ extern "C" {
 
 #define RS485_REPORT_FRAME_HEAD       0xAAu
 #define RS485_REPORT_MAX_SEATS        64u
-#define RS485_REPORT_MAX_FRAME_LEN    (2u + (RS485_REPORT_MAX_SEATS * 2u) + 1u)
+#define RS485_REPORT_MAX_FRAME_LEN    (3u + (RS485_REPORT_MAX_SEATS * 2u) + 1u)
 
 #ifndef RS485_TX_MAX_MSG
 #define RS485_TX_MAX_MSG              16u

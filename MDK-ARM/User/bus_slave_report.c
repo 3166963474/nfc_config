@@ -82,14 +82,20 @@ static void bus_slave_report_load_config(bus_slave_report_t *report)
                                        BUS_SLAVE_REPORT_DEFAULT_ACK_TIMEOUT_MS);
 
     report->max_retry = cfg->contend.max_retry;
+    report->periodic_base_interval_units =
+        cfg->reserved[SLAVE_RESERVED_PERIODIC_INTERVAL_INDEX];
+    report->periodic_random_delay_units =
+        cfg->reserved[SLAVE_RESERVED_PERIODIC_RANDOM_DELAY_INDEX];
 
-    BSR_LOG("BSR cfg: vehicle=%u slot=%u N=%u idle=%u ack_to=%u max_retry=%u\r\n",
+    BSR_LOG("BSR cfg: vehicle=%u slot=%u N=%u idle=%u ack_to=%u max_retry=%u periodic=%u*8s+0..%us\r\n",
             report->vehicle_id,
             report->slot_ms,
             report->contend_slot_count_n,
             report->idle_confirm_ms,
             report->ack_timeout_ms,
-            report->max_retry);
+            report->max_retry,
+            report->periodic_base_interval_units,
+            report->periodic_random_delay_units);
 }
 
 static void bus_slave_report_clear_timing(bus_slave_report_t *report)
@@ -98,6 +104,83 @@ static void bus_slave_report_clear_timing(bus_slave_report_t *report)
     report->idle_start_tick = 0U;
     report->contend_target_tick = 0U;
     report->last_tx_start_tick = 0U;
+}
+
+static uint32_t bus_slave_report_random_period_ms(const bus_slave_report_t *report)
+{
+    uint32_t random_delay_units = 0U;
+
+    if (report->periodic_random_delay_units != 0U)
+    {
+        /* Inclusive range: 0 .. reserved[2]. */
+        random_delay_units = bus_rand32() %
+                             ((uint32_t)report->periodic_random_delay_units + 1UL);
+    }
+
+    return ((uint32_t)report->periodic_base_interval_units *
+            BUS_SLAVE_REPORT_PERIODIC_UNIT_MS) +
+           (random_delay_units * BUS_SLAVE_REPORT_RANDOM_DELAY_UNIT_MS);
+}
+
+static void bus_slave_report_schedule_periodic(bus_slave_report_t *report,
+                                               uint32_t now_ms)
+{
+    uint32_t interval_ms;
+
+    if (report->periodic_base_interval_units == 0U)
+    {
+        report->next_periodic_report_tick = 0U;
+        report->periodic_report_scheduled = 0U;
+        return;
+    }
+
+    interval_ms = bus_slave_report_random_period_ms(report);
+    report->next_periodic_report_tick = now_ms + interval_ms;
+    report->periodic_report_scheduled = 1U;
+
+    BSR_LOG("BSR periodic scheduled: interval=%lu target=%lu\r\n",
+            interval_ms,
+            report->next_periodic_report_tick);
+}
+
+static void bus_slave_report_periodic_task(bus_slave_report_t *report,
+                                           uint32_t now_ms)
+{
+    uint8_t queued;
+
+    /* reserved[1] = 0 explicitly disables periodic reports. */
+    if (report->periodic_base_interval_units == 0U)
+    {
+        report->periodic_report_scheduled = 0U;
+        report->next_periodic_report_tick = 0U;
+        return;
+    }
+
+    if (report->periodic_report_scheduled == 0U)
+    {
+        bus_slave_report_schedule_periodic(report, now_ms);
+        return;
+    }
+
+    if ((int32_t)(now_ms - report->next_periodic_report_tick) < 0)
+    {
+        return;
+    }
+
+    queued = SeatBeltMonitor_TriggerReport();
+    if (queued != 0U)
+    {
+        report->periodic_report_count++;
+        BSR_LOG("BSR periodic report queued: count=%lu\r\n",
+                report->periodic_report_count);
+    }
+    else
+    {
+        BSR_LOG("BSR periodic report skipped: no enabled seat\r\n");
+    }
+
+    /* Select a fresh interval after every periodic trigger. */
+    bus_slave_report_schedule_periodic(report, now_ms);
 }
 
 static void bus_slave_report_set_state(bus_slave_report_t *report,
@@ -177,19 +260,21 @@ static void bus_slave_report_start_contend(bus_slave_report_t *report, uint32_t 
             report->current_event.seq);
 }
 
-static void bus_slave_report_build_payload(const seat_belt_report_event_t *event,
+static void bus_slave_report_build_payload(uint8_t vehicle_id,
+                                           const seat_belt_report_event_t *event,
                                            uint8_t frame[BUS_SLAVE_REPORT_TX_FRAME_LEN])
 {
     uint8_t i;
 
     memset(frame, 0, BUS_SLAVE_REPORT_TX_FRAME_LEN);
 
-    frame[0] = (uint8_t)(event->seq & 0xFFU);
-    frame[1] = (uint8_t)((event->seq >> 8) & 0xFFU);
+    frame[0] = vehicle_id;
+    frame[1] = (uint8_t)(event->seq & 0xFFU);
+    frame[2] = (uint8_t)((event->seq >> 8) & 0xFFU);
 
     for (i = 0U; i < SEAT_PORT_COUNT; i++)
     {
-        uint8_t base = (uint8_t)(2U + (i * 2U));
+        uint8_t base = (uint8_t)(3U + (i * 2U));
 
         if (event->seat[i].enable != 0U)
         {
@@ -226,8 +311,7 @@ static void bus_slave_report_send_current(bus_slave_report_t *report, uint32_t n
         return;
     }
 
-    bus_slave_report_build_payload(&report->current_event, frame);
-
+		bus_slave_report_build_payload(report->vehicle_id, &report->current_event, frame);
     rf_set_mode(RF_MODE_STB3);
     rf_enter_continous_tx();
     rf_continous_tx_send_data(frame, BUS_SLAVE_REPORT_TX_FRAME_LEN);
@@ -236,10 +320,11 @@ static void bus_slave_report_send_current(bus_slave_report_t *report, uint32_t n
     report->last_tx_start_tick = now_ms;
     bus_slave_report_set_state(report, BUS_SLAVE_REPORT_WAIT_TX_DONE, now_ms);
 
-    BSR_LOG("BSR tx: seq=%u s0=%u/%u s1=%u/%u retry=%u\r\n",
-            report->current_event.seq,
-            frame[2], frame[3], frame[4], frame[5],
-            report->retry_count);
+		BSR_LOG("BSR tx: vehicle=%u seq=%u s0=%u/%u s1=%u/%u retry=%u\r\n",
+						frame[0],
+						report->current_event.seq,
+						frame[3], frame[4], frame[5], frame[6],
+						report->retry_count);
 }
 
 static uint8_t bus_slave_report_parse_ack(const bus_slave_report_t *report,
@@ -248,12 +333,17 @@ static uint8_t bus_slave_report_parse_ack(const bus_slave_report_t *report,
 {
     uint16_t ack_seq;
 
-    if ((buf == NULL) || (len != BUS_SLAVE_REPORT_ACK_FRAME_LEN))
+    if ((report == NULL) || (buf == NULL) || (len != BUS_SLAVE_REPORT_ACK_FRAME_LEN))
     {
         return 0U;
     }
 
-    ack_seq = (uint16_t)buf[0] | ((uint16_t)buf[1] << 8);
+    if (buf[0] != report->vehicle_id)
+    {
+        return 0U;
+    }
+
+    ack_seq = (uint16_t)buf[1] | ((uint16_t)buf[2] << 8);
 
     return (ack_seq == report->current_event.seq) ? 1U : 0U;
 }
@@ -318,6 +408,8 @@ void bus_slave_report_start(bus_slave_report_t *report)
 
     report->current_valid = 0U;
     report->retry_count = 0U;
+    report->periodic_report_scheduled = 0U;
+    report->next_periodic_report_tick = 0U;
     bus_slave_report_enter_idle(report, 0U);
     BSR_LOG("BSR start\r\n");
 }
@@ -386,6 +478,8 @@ void bus_slave_report_task(bus_slave_report_t *report, uint32_t now_ms)
     {
         return;
     }
+
+    bus_slave_report_periodic_task(report, now_ms);
 
     if (rf_get_transmit_flag() == RADIO_FLAG_TXDONE)
     {

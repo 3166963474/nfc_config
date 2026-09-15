@@ -25,7 +25,7 @@
  * - RS485 functions are independent feature enables, not exclusive modes.
  */
 
-#define ftp2phone
+#define ftp2phone 1
 
 /* ================= Frame constants ================= */
 
@@ -44,7 +44,20 @@
 
 /* ================= Vehicle parameters ================= */
 
-#define DEFAULT_VEHICLE_ID                18u
+#define DEFAULT_VEHICLE_ID                1u
+
+/* reserved[0] hardware flags for slave configuration. */
+#define RESERVED_OCCUPIED_ACTIVE_HIGH      0x01u
+#define RESERVED_BELT_CLOSED_ACTIVE_LOW    0x02u
+#define RESERVED_PASSIVE_BUZZER            0x04u
+
+/* Set to 1 when generating configuration frames for passive-buzzer hardware. */
+#define DEFAULT_PASSIVE_BUZZER             0u
+
+/* Slave periodic report: interval = base * 8 seconds + random[0, range] seconds.
+ * Set base to 0 to disable periodic reporting. 38 * 8 + random[0,56] is 304..360 s. */
+#define DEFAULT_PERIODIC_REPORT_BASE_8S    4u
+#define DEFAULT_PERIODIC_REPORT_RANDOM_S    3u
 
 /* ================= RS485 feature flags, master only ================= */
 
@@ -59,14 +72,14 @@
 
 #define ORDER_MASK(order_state)           ((uint16_t)(1u << ((order_state) - 1u)))
 
-#define DEFAULT_ABNORMAL_ORDER_MASK       0x00
+#define DEFAULT_ABNORMAL_ORDER_MASK       ORDER_MASK(1)|ORDER_MASK(5)|ORDER_MASK(6)
 
 #define DEFAULT_FILTER_ORDER_MASK         0xFFF
-#define DEFAULT_FILTER_TIME_S             32u
+#define DEFAULT_FILTER_TIME_S             2u
 
 /* Buzzer duration: 0 = no alarm, 255 = alarm until next confirmed state. */
-#define DEFAULT_ALARM_DURATION_S          2u
-#define DEFAULT_ALARM_DELAY_S             5u
+#define DEFAULT_ALARM_DURATION_S          5u
+#define DEFAULT_ALARM_DELAY_S             1u
 
 /* ================= Slave LoRa contention parameters ================= */
 
@@ -366,7 +379,7 @@ int upload_by_curl(const char *local_file, const char *remote_file)
              "--ftp-create-dirs "
              "--user \"15191722090:198282abc\" "
              "-T \"%s\" "
-             "\"ftp://10.196.180.158:2121/360file/%s\"",
+             "\"ftp://192.168.1.100:2121/360file/%s\"",
              local_file,
              remote_file);
 
@@ -402,6 +415,8 @@ int main(void)
      * enabled at the same time when the firmware supports the combination.
      */
     master.vehicle_id = DEFAULT_VEHICLE_ID;
+    master.reserved[0] |= (DEFAULT_PASSIVE_BUZZER != 0u)
+                          ? RESERVED_PASSIVE_BUZZER : 0u;
     master.rs485_1.baudrate_index = UART_BAUD_115200_INDEX;
     master.rs485_1.feature_flags = (uint8_t)(RS485_FEATURE_JSON_OUT | RS485_FEATURE_FORWARD_TO_OTHER | RS485_FEATURE_LOG_OUT);
     master.rs485_2.baudrate_index = UART_BAUD_115200_INDEX;
@@ -414,6 +429,10 @@ int main(void)
      * Runtime report only needs order_state; raw seat/belt status is not reported.
      */
     slave.vehicle_id = DEFAULT_VEHICLE_ID;
+    slave.reserved[0] |= (DEFAULT_PASSIVE_BUZZER != 0u)
+                         ? RESERVED_PASSIVE_BUZZER : 0u;
+    slave.reserved[1] = DEFAULT_PERIODIC_REPORT_BASE_8S;
+    slave.reserved[2] = DEFAULT_PERIODIC_REPORT_RANDOM_S;
 
     slave.seat[0].enable = 1u;
     slave.seat[0].seat_no = 1u;

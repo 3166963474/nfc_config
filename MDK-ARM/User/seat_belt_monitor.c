@@ -69,11 +69,12 @@ seat_belt_monitor_seat_t s_seat[SEAT_PORT_COUNT];
 
 /* Latest-only report mailbox. New reports overwrite old unsent reports. */
 seat_belt_report_event_t s_report_mailbox;
-static uint8_t s_report_pending = 0U;
+static volatile uint8_t s_report_pending = 0U;
 static uint16_t s_event_seq = 0U;
 static uint16_t s_event_drop_count = 0U;
 
 static uint8_t s_alarm_output_active = 0U;
+static volatile uint8_t s_initialized = 0U;
 
 /* transition_map[old_state][new_state] -> order_state. 0 means no transition. */
 static const uint8_t s_transition_map[4][4] =
@@ -440,6 +441,8 @@ void SeatBeltMonitor_Init(void)
 {
     uint8_t i;
 
+    s_initialized = 0U;
+
     (void)memset(s_seat, 0, sizeof(s_seat));
     SeatBeltMonitor_ClearReportEvents();
 
@@ -447,25 +450,50 @@ void SeatBeltMonitor_Init(void)
     s_event_drop_count = 0U;
     s_alarm_output_active = 0U;
 
+    /* Apply configured input polarity before state detection starts. */
+    SEAT_BELT_MONITOR_SEAT_OCCUPIED_LEVEL = GPIO_PIN_RESET;
+    SEAT_BELT_MONITOR_BELT_CLOSED_LEVEL = GPIO_PIN_SET;
+
+    if ((slave_payload.reserved[0] & SLAVE_RESERVED_OCCUPIED_ACTIVE_HIGH) != 0U)
+    {
+        SEAT_BELT_MONITOR_SEAT_OCCUPIED_LEVEL = GPIO_PIN_SET;
+    }
+
+    if ((slave_payload.reserved[0] & SLAVE_RESERVED_BELT_CLOSED_ACTIVE_LOW) != 0U)
+    {
+        SEAT_BELT_MONITOR_BELT_CLOSED_LEVEL = GPIO_PIN_RESET;
+    }
+
     for (i = 0U; i < SEAT_PORT_COUNT; i++)
     {
-        s_seat[i].enable = ((uint8_t)(0x01&slave_payload.seat[i].enable) == SEAT_ENABLE_TRUE) ? 1U : 0U;
+        s_seat[i].enable = ((slave_payload.seat[i].enable & 0x01U) == SEAT_ENABLE_TRUE) ? 1U : 0U;
         s_seat[i].seat_no = slave_payload.seat[i].seat_no;
-        s_seat[i].stable_state = read_raw_state(i);
+
+        /*
+         * Treat power-up as a virtual transition from 00 (empty/unbuckled).
+         * The first sample can therefore report an already occupied seat.
+         */
+        s_seat[i].stable_state = SEAT_BELT_STATE_00_EMPTY_UNBUCKLED;
         s_seat[i].current_order_state = SEAT_BELT_MONITOR_INVALID_ORDER_STATE;
         clear_candidate(&s_seat[i]);
     }
-		if((slave_payload.reserved[0]&0x01) == 1)SEAT_BELT_MONITOR_SEAT_OCCUPIED_LEVEL = GPIO_PIN_SET;
-		if((slave_payload.reserved[0]&0x02) == 1)SEAT_BELT_MONITOR_BELT_CLOSED_LEVEL = GPIO_PIN_RESET;
+
     BuzzerLed_SetMode(BUZZER_LED_DEV_BUZZER, BUZZER_LED_MODE_OFF);
 #if (SEAT_BELT_MONITOR_USE_RED_LED != 0U)
     BuzzerLed_SetMode(BUZZER_LED_DEV_LED_R, BUZZER_LED_MODE_OFF);
 #endif
+
+    s_initialized = 1U;
 }
 
 void SeatBeltMonitor_Task10Hz(void)
 {
     uint8_t i;
+
+    if (s_initialized == 0U)
+    {
+        return;
+    }
 
     for (i = 0U; i < SEAT_PORT_COUNT; i++)
     {
@@ -476,6 +504,43 @@ void SeatBeltMonitor_Task10Hz(void)
     update_alarm_output();
 }
 
+uint8_t SeatBeltMonitor_TriggerReport(void)
+{
+    uint8_t i;
+    uint8_t has_enabled_seat = 0U;
+    uint32_t primask;
+
+    if (s_initialized == 0U)
+    {
+        return 0U;
+    }
+
+    for (i = 0U; i < SEAT_PORT_COUNT; i++)
+    {
+        if (s_seat[i].enable != 0U)
+        {
+            has_enabled_seat = 1U;
+            break;
+        }
+    }
+
+    if (has_enabled_seat == 0U)
+    {
+        return 0U;
+    }
+
+    /* TIM4 can update the same latest-only mailbox. */
+    primask = __get_PRIMASK();
+    __disable_irq();
+    fill_report_snapshot(UINT8_INVALID, SEAT_BELT_MONITOR_INVALID_ORDER_STATE);
+    if (primask == 0U)
+    {
+        __enable_irq();
+    }
+
+    return 1U;
+}
+
 uint8_t SeatBeltMonitor_HasReportEvent(void)
 {
     return (s_report_pending != 0U) ? 1U : 0U;
@@ -483,13 +548,32 @@ uint8_t SeatBeltMonitor_HasReportEvent(void)
 
 uint8_t SeatBeltMonitor_PopReportEvent(seat_belt_report_event_t *event)
 {
+    uint32_t primask;
+
     if ((event == NULL) || (s_report_pending == 0U))
     {
         return 0U;
     }
 
+    primask = __get_PRIMASK();
+    __disable_irq();
+
+    if (s_report_pending == 0U)
+    {
+        if (primask == 0U)
+        {
+            __enable_irq();
+        }
+        return 0U;
+    }
+
     *event = s_report_mailbox;
     s_report_pending = 0U;
+
+    if (primask == 0U)
+    {
+        __enable_irq();
+    }
 
     return 1U;
 }

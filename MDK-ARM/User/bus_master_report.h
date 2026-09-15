@@ -23,8 +23,8 @@ extern "C" {
  * Master ACK payload, no head/checksum:
  *   byte0~1 : seq, little-endian
  */
-#define BUS_MASTER_REPORT_RX_FRAME_LEN      6U
-#define BUS_MASTER_REPORT_ACK_FRAME_LEN     2U
+#define BUS_MASTER_REPORT_RX_FRAME_LEN      7U
+#define BUS_MASTER_REPORT_ACK_FRAME_LEN     3U
 #define BUS_MASTER_REPORT_TX_DONE_TIMEOUT_MS 500U
 #define BUS_MASTER_REPORT_DUP_WINDOW_MS     30000UL
 
@@ -38,6 +38,7 @@ typedef enum
 
 typedef struct
 {
+    uint8_t vehicle_id;
     uint16_t seq;
     uint8_t seat0_no;
     uint8_t seat0_order_state;
