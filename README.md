@@ -15,7 +15,7 @@
 | 无线 | PAN3029/E290 LoRa，SPI1 通信 |
 | NFC | ST25DV，通过自定义总线接口访问 |
 | 有线通信 | USART1、USART2，两路 RS485，DMA 收发 |
-| USB | USB FS CDC 虚拟串口 |
+| USB | ch343 串口 |
 | 定时器 | TIM2 微秒计时；TIM3 10 Hz 系统任务；TIM4 PWM |
 | 工程工具 | Keil MDK-ARM，ARM Compiler 5.06 update 6 |
 | Device Pack | Keil STM32F1xx DFP 2.4.1 |
@@ -45,8 +45,6 @@ BUS_SEAT_V0_0_3/
 ├─ doc/                            配置协议、通信协议和辅助资料
 └─ tools/                          CH340、DAPLink 自动烧录脚本
 ```
-
-`MDK-ARM/BUS_SEAT_V0_0_3/` 是 Keil 编译输出目录，已在 `.gitignore` 中忽略。链接脚本 `BUS_SEAT_V0_0_3.sct` 保留在该目录中。
 
 ## 主要业务模块
 
